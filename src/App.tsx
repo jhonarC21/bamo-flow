@@ -78,6 +78,7 @@ import { PlateEngravingSection } from './components/PlateEngravingSection';
 import { AccountingSection } from './components/AccountingSection';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { LiveVehicleTrackerModal } from './components/LiveVehicleTrackerModal';
+import { LockOverlayModal } from './components/LockOverlayModal';
 
 
 export default function App() {
@@ -234,6 +235,12 @@ export default function App() {
   // Live Tracker Modal
   const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
   const [liveTrackerPlate, setLiveTrackerPlate] = useState('');
+
+  // App Lock Security State (Requires User Login + PIN up to 8 digits)
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(() => {
+    const saved = localStorage.getItem('autopark_is_locked');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   // Check URL params on mount (e.g. ?track_plate=KDJF-84)
   useEffect(() => {
@@ -884,6 +891,10 @@ export default function App() {
           setLiveTrackerPlate('');
           setIsLiveTrackerOpen(true);
         }}
+        onLockPlatform={() => {
+          setIsAppLocked(true);
+          localStorage.setItem('autopark_is_locked', 'true');
+        }}
         currentTime={currentTime}
       />
 
@@ -1137,6 +1148,19 @@ export default function App() {
         spots={spots}
         rateConfig={rateConfig}
         washServices={washServices}
+      />
+
+      <LockOverlayModal
+        isLocked={isAppLocked}
+        staffUsers={staffUsers}
+        currentStaffUser={currentStaffUser}
+        appConfig={appConfig}
+        onUnlock={(authenticatedUser) => {
+          setCurrentStaffUser(authenticatedUser);
+          setCurrentUserRole(authenticatedUser.role);
+          setIsAppLocked(false);
+          localStorage.setItem('autopark_is_locked', 'false');
+        }}
       />
 
     </div>

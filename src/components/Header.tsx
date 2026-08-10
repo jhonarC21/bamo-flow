@@ -212,6 +212,19 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                     );
                   })}
+
+                  {onLockPlatform && (
+                    <button
+                      onClick={() => {
+                        setShowRoleSelector(false);
+                        onLockPlatform();
+                      }}
+                      className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-500/40 text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>🔒 Bloquear / Cerrar Sesión</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -240,17 +253,18 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {onLockPlatform && (
+                <button
+                  onClick={onLockPlatform}
+                  className="p-2 text-amber-400 hover:text-amber-300 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+                  title="Bloquear Plataforma (Clave de 8 dígitos)"
+                >
+                  <Lock className="w-4 h-4" />
+                </button>
+              )}
+
               {activeUser.role === 'admin' && (
                 <>
-                  {onLockPlatform && (
-                    <button
-                      onClick={onLockPlatform}
-                      className="p-2 text-amber-400 hover:text-amber-300 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 rounded-xl transition-colors cursor-pointer"
-                      title="Bloquear Plataforma (Clave de 8 dígitos)"
-                    >
-                      <Lock className="w-4 h-4" />
-                    </button>
-                  )}
                   {onOpenSupabase && (
                     <button
                       onClick={onOpenSupabase}
