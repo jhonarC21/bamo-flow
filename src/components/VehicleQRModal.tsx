@@ -7,9 +7,10 @@ interface VehicleQRModalProps {
   vehicle: ActiveVehicle | null;
   config: RateConfig;
   onClose: () => void;
+  onOpenLiveTrackerPlate?: (plate: string) => void;
 }
 
-export const VehicleQRModal: React.FC<VehicleQRModalProps> = ({ vehicle, config, onClose }) => {
+export const VehicleQRModal: React.FC<VehicleQRModalProps> = ({ vehicle, config, onClose, onOpenLiveTrackerPlate }) => {
   const [copied, setCopied] = useState(false);
   const [simulatedScanView, setSimulatedScanView] = useState(false);
 
@@ -20,7 +21,9 @@ export const VehicleQRModal: React.FC<VehicleQRModalProps> = ({ vehicle, config,
   const washTotal = vehicle.attachedWashService?.price || 0;
   const grandTotal = feeResult.parkingFee + storeTotal + washTotal;
 
-  const trackingUrl = `https://autopark.app/track?plate=${vehicle.plate}&ticket=${vehicle.id}`;
+  const trackingUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/?track_plate=${vehicle.plate}`
+    : `https://autopark.app/?track_plate=${vehicle.plate}`;
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(trackingUrl);
@@ -57,54 +60,30 @@ export const VehicleQRModal: React.FC<VehicleQRModalProps> = ({ vehicle, config,
           {/* QR Code Container */}
           <div className="bg-[#050508] p-6 rounded-2xl border border-slate-800 text-center space-y-4 flex flex-col items-center">
             
-            <div className="bg-white p-4 rounded-2xl shadow-xl inline-block border-4 border-indigo-500/20">
-              {/* SVG Generated QR Pattern */}
-              <svg className="w-44 h-44" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="256" height="256" fill="white" />
-                
-                {/* Outer Markers */}
-                <path d="M16 16H80V80H16V16ZM28 28V68H68V28H28Z" fill="#0f172a" />
-                <path d="M36 36H60V60H36V36Z" fill="#4f46e5" />
-
-                <path d="M176 16H240V80H176V16ZM188 28V68H228V28H188Z" fill="#0f172a" />
-                <path d="M196 36H220V60H196V36Z" fill="#4f46e5" />
-
-                <path d="M16 176H80V240H16V176ZM28 188V228H68V188H28Z" fill="#0f172a" />
-                <path d="M36 196H60V220H36V196Z" fill="#4f46e5" />
-
-                {/* Simulated QR Code Data Matrix Blocks */}
-                <rect x="96" y="24" width="16" height="16" fill="#0f172a" />
-                <rect x="128" y="24" width="16" height="16" fill="#0f172a" />
-                <rect x="96" y="56" width="32" height="16" fill="#4f46e5" />
-                <rect x="144" y="56" width="16" height="32" fill="#0f172a" />
-                
-                <rect x="24" y="96" width="16" height="32" fill="#0f172a" />
-                <rect x="56" y="96" width="32" height="16" fill="#0f172a" />
-                <rect x="104" y="96" width="24" height="24" fill="#4f46e5" />
-                <rect x="144" y="96" width="16" height="16" fill="#0f172a" />
-                <rect x="176" y="96" width="48" height="16" fill="#0f172a" />
-
-                <rect x="24" y="144" width="32" height="16" fill="#0f172a" />
-                <rect x="80" y="136" width="16" height="32" fill="#0f172a" />
-                <rect x="112" y="136" width="32" height="16" fill="#0f172a" />
-                <rect x="160" y="136" width="24" height="24" fill="#4f46e5" />
-                <rect x="200" y="136" width="24" height="24" fill="#0f172a" />
-
-                <rect x="96" y="176" width="24" height="24" fill="#0f172a" />
-                <rect x="136" y="176" width="32" height="16" fill="#0f172a" />
-                <rect x="184" y="176" width="40" height="16" fill="#4f46e5" />
-                
-                <rect x="96" y="216" width="48" height="16" fill="#0f172a" />
-                <rect x="160" y="208" width="16" height="32" fill="#0f172a" />
-                <rect x="192" y="216" width="32" height="16" fill="#0f172a" />
-              </svg>
+            <div 
+              onClick={() => onOpenLiveTrackerPlate && onOpenLiveTrackerPlate(vehicle.plate)}
+              className="bg-white p-3 rounded-2xl shadow-xl inline-block border-4 border-indigo-500/30 cursor-pointer hover:scale-105 transition-transform group relative"
+              title="Haga clic para abrir el Monitoreo en Tiempo Real"
+            >
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(trackingUrl)}`}
+                alt={`QR Tracking ${vehicle.plate}`}
+                className="w-44 h-44 object-contain"
+              />
+              <div className="absolute inset-0 bg-indigo-900/10 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-opacity">
+                <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-md">
+                  🔍 Abrir Monitoreo
+                </span>
+              </div>
             </div>
 
             <div className="space-y-1">
               <span className="font-mono text-xl font-black text-indigo-300 bg-indigo-950/80 px-3 py-1 rounded-xl border border-indigo-500/40 inline-block">
                 {vehicle.plate}
               </span>
-              <p className="text-xs text-slate-400">Escanee este código para consultar el estado del vehículo en vivo</p>
+              <p className="text-xs text-slate-400">
+                El cliente escanea este código para ver en <strong className="text-emerald-400">tiempo real</strong> su tiempo, cobro y avance de lavado.
+              </p>
             </div>
 
             {/* Live Status summary */}
@@ -141,12 +120,24 @@ export const VehicleQRModal: React.FC<VehicleQRModalProps> = ({ vehicle, config,
 
           {/* Action buttons */}
           <div className="space-y-2 text-xs">
+            {onOpenLiveTrackerPlate && (
+              <button
+                type="button"
+                onClick={() => onOpenLiveTrackerPlate(vehicle.plate)}
+                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/60 transition-all"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <ExternalLink className="w-4 h-4 text-white" />
+                <span>Probar Escaneo / Abrir Pantalla del Cliente</span>
+              </button>
+            )}
+
             <button
               onClick={() => setSimulatedScanView(!simulatedScanView)}
               className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer flex items-center justify-center gap-2 border border-slate-700 transition-colors"
             >
-              <ExternalLink className="w-4 h-4 text-indigo-400" />
-              <span>{simulatedScanView ? 'Ocultar Vista Previa del Cliente' : 'Simular Vista del Cliente (Escaneo)'}</span>
+              <QrCode className="w-4 h-4 text-indigo-400" />
+              <span>{simulatedScanView ? 'Ocultar Enlace Escaneado' : 'Ver URL Directa del QR'}</span>
             </button>
 
             {simulatedScanView && (

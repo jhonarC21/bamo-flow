@@ -1085,6 +1085,11 @@ export default function App() {
         vehicle={qrVehicle}
         config={rateConfig}
         onClose={() => setQrVehicle(null)}
+        onOpenLiveTrackerPlate={(plate) => {
+          setQrVehicle(null);
+          setLiveTrackerPlate(plate);
+          setIsLiveTrackerOpen(true);
+        }}
       />
 
       <SettingsModal

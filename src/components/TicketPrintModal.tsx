@@ -281,15 +281,22 @@ export const TicketPrintModal: React.FC<TicketPrintModalProps> = ({
 
             {/* QR Code / Barcode section - SOLO PARA TICKET DE ENTRADA */}
             {showQr && !transaction && (
-              <div className="pt-2 space-y-1">
+              <div className="pt-2 space-y-1 border-t border-dashed border-black mt-2">
                 <div className="flex justify-center my-1">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=AUTOPARK-${plate}-${ticketNumber}`}
-                    alt="QR Ticket Entrada"
-                    className="w-20 h-20 border border-black p-1"
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/?track_plate=${plate}`
+                        : `https://autopark.app/?track_plate=${plate}`
+                    )}`}
+                    alt="QR Monitoreo Cliente"
+                    className="w-20 h-20 border border-black p-0.5"
                   />
                 </div>
-                <p className="text-[8px] leading-tight text-gray-700 font-sans mt-1">
+                <p className="text-[8px] font-black uppercase text-center text-black">
+                  Escanee para Monitoreo en Tiempo Real
+                </p>
+                <p className="text-[7.5px] leading-tight text-gray-700 font-sans mt-0.5">
                   {footerText}
                 </p>
               </div>
