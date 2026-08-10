@@ -310,7 +310,20 @@ export interface VehicleClientRecord {
   updatedAt: string;
 }
 
+export interface ClientReview {
+  id: string;
+  clientName: string;
+  clientEmail?: string;
+  plate: string;
+  rating: number; // 1-5
+  comment: string;
+  serviceType: string;
+  createdAt: string;
+}
+
+
 export interface ClientUser {
+
   id: string;
   email: string;
   name: string;

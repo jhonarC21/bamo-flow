@@ -79,6 +79,23 @@ import { AccountingSection } from './components/AccountingSection';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { LiveVehicleTrackerModal } from './components/LiveVehicleTrackerModal';
 import { LockOverlayModal } from './components/LockOverlayModal';
+import {
+  fetchAllCloudData,
+  syncActiveVehicleCloud,
+  deleteActiveVehicleCloud,
+  syncTransactionCloud,
+  syncWashOrderCloud,
+  deleteWashOrderCloud,
+  syncExpenseCloud,
+  syncAccountingEntryCloud,
+  syncBookingCloud,
+  syncSpotsCloud,
+  syncStoreCatalogCloud,
+  syncStaffUsersCloud,
+  syncClientRecordsCloud,
+  syncClientReviewsCloud,
+} from './lib/supabase';
+
 
 
 export default function App() {
@@ -262,7 +279,34 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Sync to localStorage
+  // Fetch Cloud Data from Supabase on Initial Load
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCloudData() {
+      const cloud = await fetchAllCloudData();
+      if (!cloud || !isMounted) return;
+
+      if (cloud.activeVehicles) setActiveVehicles(cloud.activeVehicles);
+      if (cloud.transactions) setTransactions(cloud.transactions);
+      if (cloud.washOrders) setWashOrders(cloud.washOrders);
+      if (cloud.expenses) setExpenses(cloud.expenses);
+      if (cloud.accountingEntries) setAccountingEntries(cloud.accountingEntries);
+      if (cloud.spots && cloud.spots.length > 0) setSpots(cloud.spots);
+      if (cloud.bookings) setBookings(cloud.bookings);
+      if (cloud.storeCatalog && cloud.storeCatalog.length > 0) setStoreCatalog(cloud.storeCatalog);
+      if (cloud.staffUsers && cloud.staffUsers.length > 0) setStaffUsers(cloud.staffUsers);
+      if (cloud.clientRecords) setClientRecords(cloud.clientRecords);
+      if (cloud.clientReviews) setClientReviews(cloud.clientReviews);
+    }
+
+    loadCloudData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync to localStorage and Supabase
   useEffect(() => {
     localStorage.setItem('autopark_config', JSON.stringify(rateConfig));
     localStorage.setItem('autopark_app_config', JSON.stringify(appConfig));
@@ -285,7 +329,15 @@ export default function App() {
     } else {
       localStorage.removeItem('autopark_client_user');
     }
+
+    // Sync state changes to Supabase Cloud
+    syncSpotsCloud(spots);
+    syncStoreCatalogCloud(storeCatalog);
+    syncStaffUsersCloud(staffUsers);
+    syncClientRecordsCloud(clientRecords);
+    syncClientReviewsCloud(clientReviews);
   }, [rateConfig, spots, activeVehicles, storeCatalog, washServices, washOrders, bookings, transactions, expenses, payrollSlips, accountingEntries, staffUsers, clientRecords, clientReviews, currentUser]);
+
 
 
   // Parking Spots CRUD Handlers
@@ -382,7 +434,9 @@ export default function App() {
       date: new Date().toISOString(),
     };
     setExpenses((prev) => [newExp, ...prev]);
+    syncExpenseCloud(newExp);
   };
+
 
   // Derived metrics
   const availableSpots = spots.filter((s) => s.status === 'disponible');
@@ -410,12 +464,16 @@ export default function App() {
   const handleSubmitVehicleEntry = (data: {
     plate: string;
     vehicleType: VehicleType;
+    make?: string;
+    model?: string;
+    color?: string;
     spotId: string;
     chargingMode: ChargingMode;
     driverName?: string;
     driverPhone?: string;
     washServiceId?: string;
   }) => {
+
     const vehicleId = `v-${Date.now()}`;
     const nowIso = new Date().toISOString();
 
@@ -464,7 +522,28 @@ export default function App() {
 
     setActiveVehicles((prev) => [...prev, newVehicle]);
 
+    // Sync to Supabase Cloud
+    syncActiveVehicleCloud(newVehicle);
+    if (washAttachment && data.washServiceId) {
+      const ws = washServices.find((s) => s.id === data.washServiceId);
+      if (ws) {
+        syncWashOrderCloud({
+          id: `wo-${Date.now()}`,
+          plate: data.plate,
+          vehicleType: data.vehicleType,
+          serviceId: ws.id,
+          serviceName: ws.name,
+          price: ws.price,
+          assignedOperator: 'Asignado en ingreso',
+          status: 'pendiente',
+          createdAt: nowIso,
+          spotId: data.spotId,
+        });
+      }
+    }
+
     // Upsert or update vehicle client record in DB
+
     setClientRecords((prev) => {
       const cleanPlate = data.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
       const existingIdx = prev.findIndex(
@@ -515,7 +594,14 @@ export default function App() {
   // Handlers for modifying vehicle entry time or deleting vehicle service
   const handleSaveEntryTime = (vehicleId: string, newEntryTimeIso: string) => {
     setActiveVehicles((prev) =>
-      prev.map((v) => (v.id === vehicleId ? { ...v, entryTime: newEntryTimeIso } : v))
+      prev.map((v) => {
+        if (v.id === vehicleId) {
+          const updated = { ...v, entryTime: newEntryTimeIso };
+          syncActiveVehicleCloud(updated);
+          return updated;
+        }
+        return v;
+      })
     );
   };
 
@@ -525,6 +611,7 @@ export default function App() {
         prev.map((s) => (s.id === vehicle.spotId ? { ...s, status: 'disponible', currentVehicleId: undefined } : s))
       );
       setActiveVehicles((prev) => prev.filter((v) => v.id !== vehicle.id));
+      deleteActiveVehicleCloud(vehicle.id);
     }
   };
 
@@ -603,7 +690,12 @@ export default function App() {
     setActiveVehicles((prev) => prev.filter((v) => v.id !== txData.vehicle.id));
     setTransactions((prev) => [newTransaction, ...prev]);
     setPrintTransaction(newTransaction);
+
+    // Sync checkout transaction & remove vehicle from cloud active_vehicles
+    syncTransactionCloud(newTransaction);
+    deleteActiveVehicleCloud(txData.vehicle.id);
   };
+
 
   // Attach store items to vehicle
   const handleUpdateVehicleStoreItems = (
@@ -611,7 +703,14 @@ export default function App() {
     items: { item: StoreItem; quantity: number; total: number }[]
   ) => {
     setActiveVehicles((prev) =>
-      prev.map((v) => (v.id === vehicleId ? { ...v, attachedStoreItems: items } : v))
+      prev.map((v) => {
+        if (v.id === vehicleId) {
+          const updated = { ...v, attachedStoreItems: items };
+          syncActiveVehicleCloud(updated);
+          return updated;
+        }
+        return v;
+      })
     );
   };
 
@@ -661,6 +760,7 @@ export default function App() {
 
     setTransactions((prev) => [newTx, ...prev]);
     setPrintTransaction(newTx);
+    syncTransactionCloud(newTx);
   };
 
   // Attach store cart directly to vehicle from Store tab
@@ -692,52 +792,65 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     setWashOrders((prev) => [newOrder, ...prev]);
+    syncWashOrderCloud(newOrder);
 
     if (orderData.spotId) {
       setActiveVehicles((prev) =>
-        prev.map((v) =>
-          v.spotId === orderData.spotId
-            ? {
-                ...v,
-                attachedWashService: {
-                  serviceId: orderData.serviceId,
-                  serviceName: orderData.serviceName,
-                  price: orderData.price,
-                  status: 'pendiente',
-                },
-              }
-            : v
-        )
+        prev.map((v) => {
+          if (v.spotId === orderData.spotId) {
+            const updated = {
+              ...v,
+              attachedWashService: {
+                serviceId: orderData.serviceId,
+                serviceName: orderData.serviceName,
+                price: orderData.price,
+                status: 'pendiente' as WashStatus,
+              },
+            };
+            syncActiveVehicleCloud(updated);
+            return updated;
+          }
+          return v;
+        })
       );
     }
   };
 
   const handleUpdateWashStatus = (orderId: string, newStatus: WashStatus) => {
+    let updatedOrderObj: WashOrder | null = null;
     setWashOrders((prev) =>
       prev.map((w) => {
         if (w.id === orderId) {
           const updated = { ...w, status: newStatus };
           if (newStatus === 'entregado') updated.completedAt = new Date().toISOString();
+          updatedOrderObj = updated;
           return updated;
         }
         return w;
       })
     );
 
+    if (updatedOrderObj) {
+      syncWashOrderCloud(updatedOrderObj);
+    }
+
     const targetOrder = washOrders.find((w) => w.id === orderId);
     if (targetOrder) {
       setActiveVehicles((prev) =>
-        prev.map((v) =>
-          v.plate === targetOrder.plate && v.attachedWashService
-            ? {
-                ...v,
-                attachedWashService: {
-                  ...v.attachedWashService,
-                  status: newStatus,
-                },
-              }
-            : v
-        )
+        prev.map((v) => {
+          if (v.plate === targetOrder.plate && v.attachedWashService) {
+            const updated = {
+              ...v,
+              attachedWashService: {
+                ...v.attachedWashService,
+                status: newStatus,
+              },
+            };
+            syncActiveVehicleCloud(updated);
+            return updated;
+          }
+          return v;
+        })
       );
     }
   };
@@ -749,11 +862,27 @@ export default function App() {
       id: `b-${Date.now()}`,
     };
     setBookings((prev) => [newBooking, ...prev]);
+    syncBookingCloud(newBooking);
   };
 
   const handleUpdateBookingStatus = (bookingId: string, status: BookingStatus) => {
-    setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status } : b)));
+    let updatedBookingObj: Booking | null = null;
+    setBookings((prev) =>
+      prev.map((b) => {
+        if (b.id === bookingId) {
+          const updated = { ...b, status };
+          updatedBookingObj = updated;
+          return updated;
+        }
+        return b;
+      })
+    );
+
+    if (updatedBookingObj) {
+      syncBookingCloud(updatedBookingObj);
+    }
   };
+
 
   const handleConvertBookingToEntry = (booking: Booking) => {
     setActiveTab('patio');
@@ -864,10 +993,12 @@ export default function App() {
     if (reviewData.rating <= 2) {
       setClientRecords((prev) =>
         prev.map((r) =>
-          r.plate.toUpperCase() === reviewData.plate.toUpperCase() || r.clientEmail.toLowerCase() === reviewData.clientEmail.toLowerCase()
+          r.plate.toUpperCase() === reviewData.plate.toUpperCase() ||
+          (reviewData.clientEmail && r.clientEmail && r.clientEmail.toLowerCase() === reviewData.clientEmail.toLowerCase())
             ? { ...r, category: 'mala_resena', rating: reviewData.rating, reviewNote: reviewData.comment }
             : r
         )
+
       );
     }
   };
@@ -1027,9 +1158,13 @@ export default function App() {
             expenses={expenses}
             payrollSlips={payrollSlips}
             entries={accountingEntries}
-            onSaveEntries={(updatedEntries) => setAccountingEntries(updatedEntries)}
+            onSaveEntries={(updatedEntries) => {
+              setAccountingEntries(updatedEntries);
+              updatedEntries.forEach((entry) => syncAccountingEntryCloud(entry));
+            }}
           />
         )}
+
 
         {activeTab === 'nomina' && (
 
