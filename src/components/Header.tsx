@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car, Clock, DollarSign, PlusCircle, Settings, ShieldAlert, Sparkles, RefreshCw, UserCheck, Shield, ShoppingBag, CarFront, User, Lock, KeyRound, X, Database } from 'lucide-react';
+import { Car, Clock, DollarSign, PlusCircle, Settings, ShieldAlert, Sparkles, RefreshCw, UserCheck, Shield, ShoppingBag, CarFront, User, Lock, KeyRound, X, Database, Eye } from 'lucide-react';
 import { RateConfig, StaffUser, UserRole, AppConfig } from '../types';
 import { formatCurrency } from '../utils/pricing';
 import { initialStaffUsers } from '../data/initialData';
@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenNewEntry: () => void;
   onOpenSettings: () => void;
   onOpenSupabase?: () => void;
+  onOpenLiveTracker?: () => void;
   onLockPlatform?: () => void;
   currentTime: Date;
 }
@@ -39,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewEntry,
   onOpenSettings,
   onOpenSupabase,
+  onOpenLiveTracker,
   onLockPlatform,
   currentTime,
 }) => {
@@ -216,6 +218,18 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Quick Actions */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800/80">
+              {onOpenLiveTracker && (
+                <button
+                  onClick={onOpenLiveTracker}
+                  className="bg-[#111125] hover:bg-indigo-950 text-indigo-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap border border-indigo-500/30 shadow-md"
+                  title="Monitoreo de Vehículos en Tiempo Real para Clientes"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <span className="hidden md:inline">Monitoreo Cliente</span>
+                </button>
+              )}
+
               {activeUser.role !== 'cliente' && (
                 <button
                   onClick={onOpenNewEntry}

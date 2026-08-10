@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActiveVehicle, ParkingSpot, RateConfig, VehicleType } from '../types';
 import { calculateParkingFee, formatCurrency, formatDuration, formatTimeOnly } from '../utils/pricing';
-import { Car, Clock, DollarSign, LogOut, Plus, ShoppingCart, Sparkles, Tag, User, Edit3, Trash2, QrCode, X } from 'lucide-react';
+import { Car, Clock, DollarSign, LogOut, Plus, ShoppingCart, Sparkles, Tag, User, Edit3, Trash2, QrCode, X, Eye } from 'lucide-react';
 
 interface ParkingGridProps {
   spots: ParkingSpot[];
@@ -15,6 +15,7 @@ interface ParkingGridProps {
   onEditEntryTime: (vehicle: ActiveVehicle) => void;
   onDeleteVehicleService: (vehicle: ActiveVehicle) => void;
   onShowQR: (vehicle: ActiveVehicle) => void;
+  onOpenLiveTrackerPlate?: (plate: string) => void;
   onAddSpot?: (spot: ParkingSpot) => void;
   onUpdateSpot?: (spot: ParkingSpot) => void;
   onDeleteSpot?: (spotId: string) => void;
@@ -41,6 +42,7 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
   onEditEntryTime,
   onDeleteVehicleService,
   onShowQR,
+  onOpenLiveTrackerPlate,
   onAddSpot,
   onUpdateSpot,
   onDeleteSpot,
@@ -393,28 +395,37 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
               </div>
 
               {/* Quick Actions Footer */}
-              <div className="mt-2 grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/60">
+              <div className="mt-2 grid grid-cols-5 gap-1 pt-2 border-t border-slate-800/60">
                 <button
                   onClick={() => onQuickAttachStore(vehicle)}
-                  className="bg-slate-800/80 hover:bg-slate-700 text-amber-300 border border-slate-700/60 p-1.5 rounded-xl text-[10px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
-                  title="Añadir artículo de tienda a la cuenta"
+                  className="bg-slate-800/80 hover:bg-slate-700 text-amber-300 border border-slate-700/60 p-1.5 rounded-xl text-[9px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
+                  title="Añadir artículo de tienda"
                 >
                   <ShoppingCart className="w-3.5 h-3.5 mb-0.5 text-amber-400" />
-                  <span>+Tienda</span>
+                  <span>Tienda</span>
                 </button>
 
                 <button
                   onClick={() => onQuickAttachWash(vehicle)}
-                  className="bg-slate-800/80 hover:bg-slate-700 text-indigo-300 border border-slate-700/60 p-1.5 rounded-xl text-[10px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
+                  className="bg-slate-800/80 hover:bg-slate-700 text-indigo-300 border border-slate-700/60 p-1.5 rounded-xl text-[9px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
                   title="Añadir o ver lavado de auto"
                 >
                   <Sparkles className="w-3.5 h-3.5 mb-0.5 text-indigo-400" />
-                  <span>+Lavado</span>
+                  <span>Lavado</span>
+                </button>
+
+                <button
+                  onClick={() => onOpenLiveTrackerPlate && onOpenLiveTrackerPlate(vehicle.plate)}
+                  className="bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 p-1.5 rounded-xl text-[9px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
+                  title="Monitoreo en Tiempo Real (Cliente)"
+                >
+                  <Eye className="w-3.5 h-3.5 mb-0.5 text-emerald-400" />
+                  <span>En Vivo</span>
                 </button>
 
                 <button
                   onClick={() => onPrintTicket(vehicle)}
-                  className="bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 p-1.5 rounded-xl text-[10px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
+                  className="bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 p-1.5 rounded-xl text-[9px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer"
                   title="Ver Ticket de Ingreso"
                 >
                   <Tag className="w-3.5 h-3.5 mb-0.5 text-slate-400" />
@@ -423,7 +434,7 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
 
                 <button
                   onClick={() => onOpenCheckout(vehicle)}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 p-1.5 rounded-xl text-[10px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer shadow-lg shadow-indigo-900/50"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 p-1.5 rounded-xl text-[9px] font-bold flex flex-col items-center justify-center transition-colors cursor-pointer shadow-lg shadow-indigo-900/50"
                   title="Realizar cobro y liberar espacio"
                 >
                   <LogOut className="w-3.5 h-3.5 mb-0.5" />

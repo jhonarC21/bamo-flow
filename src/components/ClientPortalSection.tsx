@@ -33,6 +33,7 @@ interface ClientPortalSectionProps {
   onLogout: () => void;
   onAddClientBooking: (bookingData: Omit<Booking, 'id'>) => void;
   onAddReview: (review: Omit<ClientReview, 'id' | 'createdAt'>) => void;
+  onOpenLiveTrackerPlate?: (plate: string) => void;
 }
 
 export const ClientPortalSection: React.FC<ClientPortalSectionProps> = ({
@@ -48,6 +49,7 @@ export const ClientPortalSection: React.FC<ClientPortalSectionProps> = ({
   onLogout,
   onAddClientBooking,
   onAddReview,
+  onOpenLiveTrackerPlate,
 }) => {
   // Auth Form Modes
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify_email'>('login');
@@ -647,6 +649,17 @@ export const ClientPortalSection: React.FC<ClientPortalSectionProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {onOpenLiveTrackerPlate && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenLiveTrackerPlate(v.plate)}
+                          className="w-full mt-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                          <span>🔍 Abrir Monitoreo en Tiempo Real</span>
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

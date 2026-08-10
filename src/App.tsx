@@ -77,6 +77,7 @@ import { PayrollSection } from './components/PayrollSection';
 import { PlateEngravingSection } from './components/PlateEngravingSection';
 import { AccountingSection } from './components/AccountingSection';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
+import { LiveVehicleTrackerModal } from './components/LiveVehicleTrackerModal';
 
 
 export default function App() {
@@ -229,6 +230,22 @@ export default function App() {
   // Ticket print view modal
   const [printVehicle, setPrintVehicle] = useState<ActiveVehicle | null>(null);
   const [printTransaction, setPrintTransaction] = useState<Transaction | null>(null);
+
+  // Live Tracker Modal
+  const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
+  const [liveTrackerPlate, setLiveTrackerPlate] = useState('');
+
+  // Check URL params on mount (e.g. ?track_plate=KDJF-84)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const plateParam = params.get('track_plate');
+      if (plateParam) {
+        setLiveTrackerPlate(plateParam.toUpperCase());
+        setIsLiveTrackerOpen(true);
+      }
+    }
+  }, []);
 
   // Real-time ticking clock for timers
   useEffect(() => {
@@ -863,6 +880,10 @@ export default function App() {
         onOpenNewEntry={() => handleOpenNewEntryWithSpot()}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSupabase={() => setIsSupabaseOpen(true)}
+        onOpenLiveTracker={() => {
+          setLiveTrackerPlate('');
+          setIsLiveTrackerOpen(true);
+        }}
         currentTime={currentTime}
       />
 
@@ -895,6 +916,10 @@ export default function App() {
             onEditEntryTime={(vehicle) => setEditTimeVehicle(vehicle)}
             onDeleteVehicleService={handleDeleteVehicleService}
             onShowQR={(vehicle) => setQrVehicle(vehicle)}
+            onOpenLiveTrackerPlate={(plate) => {
+              setLiveTrackerPlate(plate);
+              setIsLiveTrackerOpen(true);
+            }}
             onAddSpot={handleAddSpot}
             onUpdateSpot={handleUpdateSpot}
             onDeleteSpot={handleDeleteSpot}
@@ -969,6 +994,10 @@ export default function App() {
             onLogout={handleLogout}
             onAddClientBooking={handleAddBooking}
             onAddReview={handleAddReview}
+            onOpenLiveTrackerPlate={(plate) => {
+              setLiveTrackerPlate(plate);
+              setIsLiveTrackerOpen(true);
+            }}
           />
         )}
 
@@ -1092,6 +1121,17 @@ export default function App() {
           setPrintVehicle(null);
           setPrintTransaction(null);
         }}
+      />
+
+      <LiveVehicleTrackerModal
+        isOpen={isLiveTrackerOpen}
+        onClose={() => setIsLiveTrackerOpen(false)}
+        initialPlate={liveTrackerPlate}
+        activeVehicles={activeVehicles}
+        washOrders={washOrders}
+        spots={spots}
+        rateConfig={rateConfig}
+        washServices={washServices}
       />
 
     </div>
