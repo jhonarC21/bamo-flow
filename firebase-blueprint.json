@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "app_config": {
+      "title": "Configuración de la Aplicación",
+      "description": "Ajustes de branding, impresora 58mm, clave de seguridad y comisión de tarjeta",
+      "type": "object",
+      "properties": {
+        "appTitle": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "cardFeePercentage": { "type": "number" },
+        "appPin": { "type": "string" },
+        "isLocked": { "type": "boolean" },
+        "printer58mm": { "type": "object" }
+      }
+    },
+    "parking_spots": {
+      "title": "Espacios de Estacionamiento",
+      "description": "Estado y distribución de los estacionamientos en tiempo real",
+      "type": "array"
+    },
+    "active_vehicles": {
+      "title": "Vehículos Estacionados",
+      "description": "Vehículos actualmente ingresados en los estacionamientos",
+      "type": "array"
+    },
+    "parking_history": {
+      "title": "Historial de Cobros",
+      "description": "Historial de transacciones de salida e ingresos",
+      "type": "array"
+    },
+    "car_wash_appointments": {
+      "title": "Agenda de Lavados",
+      "description": "Citas y reservas de lavado de vehículos",
+      "type": "array"
+    },
+    "store_items": {
+      "title": "Inventario de la Tienda",
+      "description": "Productos y promociones de la tienda",
+      "type": "array"
+    },
+    "store_sales": {
+      "title": "Ventas de la Tienda",
+      "description": "Registro de ventas de productos de la tienda",
+      "type": "array"
+    },
+    "client_users": {
+      "title": "Clientes Registrados",
+      "description": "Cuentas de clientes para el portal",
+      "type": "array"
+    },
+    "expenses": {
+      "title": "Gastos Operativos",
+      "description": "Registro de egresos y facturas del estacionamiento",
+      "type": "array"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Gestión de Estacionamiento y Servicios",
+  "description": "Sistema integral de gestión de estacionamiento con cobro por minuto o por tramos, tienda de artículos, lavadero de autos y agenda de reservas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
