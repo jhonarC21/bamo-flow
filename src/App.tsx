@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ActiveVehicle,
   Booking,
@@ -94,117 +94,35 @@ import {
   syncStaffUsersCloud,
   syncClientRecordsCloud,
   syncClientReviewsCloud,
-} from './lib/supabase';
-
-
+} from './utils/supabase';
 
 export default function App() {
-  // One-time cleanup of old demo data from localStorage if present
-  if (typeof window !== 'undefined' && !localStorage.getItem('autopark_demo_v3_cleared')) {
-    localStorage.removeItem('autopark_vehicles');
-    localStorage.removeItem('autopark_wash_orders');
-    localStorage.removeItem('autopark_bookings');
-    localStorage.removeItem('autopark_transactions');
-    localStorage.removeItem('autopark_expenses');
-    localStorage.removeItem('autopark_payroll');
-    localStorage.removeItem('autopark_accounting_entries');
-    localStorage.removeItem('autopark_client_records');
-    localStorage.removeItem('autopark_client_reviews');
-    localStorage.removeItem('autopark_spots');
-    localStorage.setItem('autopark_demo_v3_cleared', 'true');
-  }
-
-  // Main State initialized from localStorage or initial defaults
-  const [rateConfig, setRateConfig] = useState<RateConfig>(() => {
-    const saved = localStorage.getItem('autopark_config');
-    return saved ? JSON.parse(saved) : defaultRateConfig;
-  });
-
-  const [appConfig, setAppConfig] = useState<AppConfig>(() => {
-    const saved = localStorage.getItem('autopark_app_config');
-    return saved ? JSON.parse(saved) : defaultAppConfig;
-  });
-
-  const [spots, setSpots] = useState<ParkingSpot[]>(() => {
-    const saved = localStorage.getItem('autopark_spots');
-    return saved ? JSON.parse(saved) : initialSpots;
-  });
-
-  const [activeVehicles, setActiveVehicles] = useState<ActiveVehicle[]>(() => {
-    const saved = localStorage.getItem('autopark_vehicles');
-    return saved ? JSON.parse(saved) : initialActiveVehicles;
-  });
-
-  const [storeCatalog, setStoreCatalog] = useState<StoreItem[]>(() => {
-    const saved = localStorage.getItem('autopark_store');
-    return saved ? JSON.parse(saved) : initialStoreItems;
-  });
-
-  const [washServices, setWashServices] = useState<CarWashService[]>(() => {
-    const saved = localStorage.getItem('autopark_wash_services');
-    return saved ? JSON.parse(saved) : initialWashServices;
-  });
-
-  const [washOrders, setWashOrders] = useState<WashOrder[]>(() => {
-    const saved = localStorage.getItem('autopark_wash_orders');
-    return saved ? JSON.parse(saved) : initialWashOrders;
-  });
-
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('autopark_bookings');
-    return saved ? JSON.parse(saved) : initialBookings;
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('autopark_transactions');
-    return saved ? JSON.parse(saved) : initialTransactions;
-  });
-
-  const [nextBoletaNumber, setNextBoletaNumber] = useState<number>(() => {
-    const saved = localStorage.getItem('autopark_next_boleta');
-    return saved ? parseInt(saved, 10) : 3500;
-  });
-
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem('autopark_expenses');
-    return saved ? JSON.parse(saved) : initialExpenses;
-  });
-
-  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>(() => {
-    const saved = localStorage.getItem('autopark_accounting_entries');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  // Main State initialized directly from defaults (cloud data loaded async via Supabase on mount)
+  const [rateConfig, setRateConfig] = useState<RateConfig>(defaultRateConfig);
+  const [appConfig, setAppConfig] = useState<AppConfig>(defaultAppConfig);
+  const [spots, setSpots] = useState<ParkingSpot[]>(initialSpots);
+  const [activeVehicles, setActiveVehicles] = useState<ActiveVehicle[]>(initialActiveVehicles);
+  const [storeCatalog, setStoreCatalog] = useState<StoreItem[]>(initialStoreItems);
+  const [washServices, setWashServices] = useState<CarWashService[]>(initialWashServices);
+  const [washOrders, setWashOrders] = useState<WashOrder[]>(initialWashOrders);
+  const [bookings, setBookings] = useState<Booking[]>(initialBookings);
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [nextBoletaNumber, setNextBoletaNumber] = useState<number>(3500);
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [accountingEntries, setAccountingEntries] = useState<AccountingEntry[]>([]);
 
   // CRM & Client Portal State
-  const [clientRecords, setClientRecords] = useState<VehicleClientRecord[]>(() => {
-    const saved = localStorage.getItem('autopark_client_records');
-    return saved ? JSON.parse(saved) : initialClientRecords;
-  });
-
-  const [clientReviews, setClientReviews] = useState<ClientReview[]>(() => {
-    const saved = localStorage.getItem('autopark_client_reviews');
-    return saved ? JSON.parse(saved) : initialClientReviews;
-  });
-
-  const [currentUser, setCurrentUser] = useState<ClientUser | null>(() => {
-    const saved = localStorage.getItem('autopark_client_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [clientRecords, setClientRecords] = useState<VehicleClientRecord[]>(initialClientRecords);
+  const [clientReviews, setClientReviews] = useState<ClientReview[]>(initialClientReviews);
+  const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
 
   // Active RBAC User Role and Staff Accounts
-  const [staffUsers, setStaffUsers] = useState<StaffUser[]>(() => {
-    const saved = localStorage.getItem('autopark_staff_users');
-    return saved ? JSON.parse(saved) : initialStaffUsers;
-  });
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>(initialStaffUsers);
   const [currentStaffUser, setCurrentStaffUser] = useState<StaffUser>(staffUsers[0] || initialStaffUsers[0]);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('admin');
 
   // Payroll Slips State
-  const [payrollSlips, setPayrollSlips] = useState<PayrollSlip[]>(() => {
-    const saved = localStorage.getItem('autopark_payroll');
-    return saved ? JSON.parse(saved) : initialPayrollSlips;
-  });
+  const [payrollSlips, setPayrollSlips] = useState<PayrollSlip[]>(initialPayrollSlips);
 
   const handleSwitchStaffUser = (user: StaffUser) => {
     setCurrentStaffUser(user);
@@ -225,6 +143,7 @@ export default function App() {
       registeredBy: currentStaffUser.name,
     };
     setExpenses((prev) => [newExpense, ...prev]);
+    syncExpenseCloud(newExpense);
   };
 
   // Temporary registration pending verification
@@ -253,11 +172,8 @@ export default function App() {
   const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
   const [liveTrackerPlate, setLiveTrackerPlate] = useState('');
 
-  // App Lock Security State (Requires User Login + PIN up to 8 digits)
-  const [isAppLocked, setIsAppLocked] = useState<boolean>(() => {
-    const saved = localStorage.getItem('autopark_is_locked');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  // App Lock Security State
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(true);
 
   // Check URL params on mount (e.g. ?track_plate=KDJF-84)
   useEffect(() => {
@@ -279,12 +195,11 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Cloud Data from Supabase on Initial Load
-  useEffect(() => {
-    let isMounted = true;
-    async function loadCloudData() {
+  // Async Fetch Cloud Data from Supabase Cloud on Initial Load & Periodic Sync (every 5s)
+  const loadCloudData = useCallback(async () => {
+    try {
       const cloud = await fetchAllCloudData();
-      if (!cloud || !isMounted) return;
+      if (!cloud) return;
 
       if (cloud.activeVehicles) setActiveVehicles(cloud.activeVehicles);
       if (cloud.transactions) setTransactions(cloud.transactions);
@@ -297,46 +212,21 @@ export default function App() {
       if (cloud.staffUsers && cloud.staffUsers.length > 0) setStaffUsers(cloud.staffUsers);
       if (cloud.clientRecords) setClientRecords(cloud.clientRecords);
       if (cloud.clientReviews) setClientReviews(cloud.clientReviews);
+    } catch (err) {
+      console.warn('Error fetching Supabase cloud data:', err);
     }
-
-    loadCloudData();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
-  // Sync to localStorage and Supabase
   useEffect(() => {
-    localStorage.setItem('autopark_config', JSON.stringify(rateConfig));
-    localStorage.setItem('autopark_app_config', JSON.stringify(appConfig));
-    localStorage.setItem('autopark_spots', JSON.stringify(spots));
-    localStorage.setItem('autopark_vehicles', JSON.stringify(activeVehicles));
-    localStorage.setItem('autopark_store', JSON.stringify(storeCatalog));
-    localStorage.setItem('autopark_wash_services', JSON.stringify(washServices));
-    localStorage.setItem('autopark_wash_orders', JSON.stringify(washOrders));
-    localStorage.setItem('autopark_bookings', JSON.stringify(bookings));
-    localStorage.setItem('autopark_transactions', JSON.stringify(transactions));
-    localStorage.setItem('autopark_expenses', JSON.stringify(expenses));
-    localStorage.setItem('autopark_payroll', JSON.stringify(payrollSlips));
-    localStorage.setItem('autopark_accounting_entries', JSON.stringify(accountingEntries));
-    localStorage.setItem('autopark_staff_users', JSON.stringify(staffUsers));
+    loadCloudData();
 
-    localStorage.setItem('autopark_client_records', JSON.stringify(clientRecords));
-    localStorage.setItem('autopark_client_reviews', JSON.stringify(clientReviews));
-    if (currentUser) {
-      localStorage.setItem('autopark_client_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('autopark_client_user');
-    }
+    // Auto-refresh every 5 seconds for multi-device synchronization
+    const syncTimer = setInterval(() => {
+      loadCloudData();
+    }, 5000);
 
-    // Sync state changes to Supabase Cloud
-    syncSpotsCloud(spots);
-    syncStoreCatalogCloud(storeCatalog);
-    syncStaffUsersCloud(staffUsers);
-    syncClientRecordsCloud(clientRecords);
-    syncClientReviewsCloud(clientReviews);
-  }, [rateConfig, spots, activeVehicles, storeCatalog, washServices, washOrders, bookings, transactions, expenses, payrollSlips, accountingEntries, staffUsers, clientRecords, clientReviews, currentUser]);
+    return () => clearInterval(syncTimer);
+  }, [loadCloudData]);
 
 
 
@@ -633,14 +523,10 @@ export default function App() {
     elapsedMinutes: number;
     itemDetails: string[];
   }) => {
-    const currentBoleta = nextBoletaNumber;
-    setNextBoletaNumber((prev) => {
-      const next = prev + 1;
-      localStorage.setItem('autopark_next_boleta', next.toString());
-      return next;
-    });
-
     const vatCalc = txData.vatAmount ?? Math.round(txData.total - txData.total / 1.19);
+    const currentBoleta = nextBoletaNumber;
+    setNextBoletaNumber((prev) => prev + 1);
+
     const newTransaction: Transaction = {
       id: `t-${Date.now()}`,
       ticketNumber: `TKT-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -736,11 +622,7 @@ export default function App() {
     });
 
     const currentBoleta = nextBoletaNumber;
-    setNextBoletaNumber((prev) => {
-      const next = prev + 1;
-      localStorage.setItem('autopark_next_boleta', next.toString());
-      return next;
-    });
+    setNextBoletaNumber((prev) => prev + 1);
 
     const newTx: Transaction = {
       id: `t-${Date.now()}`,

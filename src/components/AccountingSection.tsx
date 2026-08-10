@@ -82,14 +82,7 @@ export const AccountingSection: React.FC<AccountingSectionProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all'); // 'all', '2026-08', '2026', etc.
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
-  const [accounts, setAccounts] = useState<AccountingAccount[]>(() => {
-    const saved = localStorage.getItem('autopark_accounting_accounts');
-    return saved ? JSON.parse(saved) : DEFAULT_ACCOUNTS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('autopark_accounting_accounts', JSON.stringify(accounts));
-  }, [accounts]);
+  const [accounts, setAccounts] = useState<AccountingAccount[]>(DEFAULT_ACCOUNTS);
 
   // Form state for New Entry Modal
   const [modalDate, setModalDate] = useState<string>(new Date().toISOString().split('T')[0]);
