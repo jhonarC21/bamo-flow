@@ -80,6 +80,21 @@ import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 
 
 export default function App() {
+  // One-time cleanup of old demo data from localStorage if present
+  if (typeof window !== 'undefined' && !localStorage.getItem('autopark_demo_v3_cleared')) {
+    localStorage.removeItem('autopark_vehicles');
+    localStorage.removeItem('autopark_wash_orders');
+    localStorage.removeItem('autopark_bookings');
+    localStorage.removeItem('autopark_transactions');
+    localStorage.removeItem('autopark_expenses');
+    localStorage.removeItem('autopark_payroll');
+    localStorage.removeItem('autopark_accounting_entries');
+    localStorage.removeItem('autopark_client_records');
+    localStorage.removeItem('autopark_client_reviews');
+    localStorage.removeItem('autopark_spots');
+    localStorage.setItem('autopark_demo_v3_cleared', 'true');
+  }
+
   // Main State initialized from localStorage or initial defaults
   const [rateConfig, setRateConfig] = useState<RateConfig>(() => {
     const saved = localStorage.getItem('autopark_config');
