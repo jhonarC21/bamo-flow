@@ -7,6 +7,7 @@ import {
   CartItem,
   ChargingMode,
   ParkingSpot,
+  SpotStatus,
   RateConfig,
   StoreItem,
   Transaction,
@@ -94,6 +95,9 @@ import {
   syncStaffUsersCloud,
   syncClientRecordsCloud,
   syncClientReviewsCloud,
+  parkVehicleSpaceCloud,
+  releaseVehicleSpaceCloud,
+  subscribeParkingSpacesRealtime,
 } from './utils/supabase';
 
 export default function App() {
@@ -220,12 +224,36 @@ export default function App() {
   useEffect(() => {
     loadCloudData();
 
+    // Subscribe to real-time changes on parking_spaces in Supabase via .onPostgresChanges
+    const unsubscribeRealtime = subscribeParkingSpacesRealtime((updatedRow) => {
+      if (!updatedRow) return;
+      const updatedId = String(updatedRow.id);
+      setSpots((prev) =>
+        prev.map((s) => {
+          if (s.id === updatedId || s.label === updatedRow.label) {
+            return {
+              ...s,
+              status: (updatedRow.status || s.status) as SpotStatus,
+              vehiclePlate: updatedRow.vehicle_plate || undefined,
+              vehicleType: updatedRow.vehicle_type || undefined,
+              checkInTime: updatedRow.check_in_time || undefined,
+              currentVehicleId: updatedRow.vehicle_plate ? `v-${updatedRow.vehicle_plate}` : undefined,
+            };
+          }
+          return s;
+        })
+      );
+    });
+
     // Auto-refresh every 5 seconds for multi-device synchronization
     const syncTimer = setInterval(() => {
       loadCloudData();
     }, 5000);
 
-    return () => clearInterval(syncTimer);
+    return () => {
+      clearInterval(syncTimer);
+      unsubscribeRealtime();
+    };
   }, [loadCloudData]);
 
 
@@ -243,6 +271,16 @@ export default function App() {
 
   const handleUpdateSpot = (updatedSpot: ParkingSpot) => {
     setSpots((prev) => prev.map((s) => (s.id === updatedSpot.id ? updatedSpot : s)));
+    if (updatedSpot.status === 'disponible') {
+      releaseVehicleSpaceCloud(updatedSpot.id);
+    } else if (updatedSpot.status === 'ocupado' && updatedSpot.vehiclePlate) {
+      parkVehicleSpaceCloud(
+        updatedSpot.id,
+        updatedSpot.vehiclePlate,
+        updatedSpot.vehicleType || 'auto',
+        updatedSpot.checkInTime || new Date().toISOString()
+      );
+    }
   };
 
   const handleDeleteSpot = (spotId: string) => {
@@ -475,8 +513,11 @@ export default function App() {
     });
 
     setSpots((prev) =>
-      prev.map((s) => (s.id === data.spotId ? { ...s, status: 'ocupado', currentVehicleId: vehicleId } : s))
+      prev.map((s) => (s.id === data.spotId ? { ...s, status: 'ocupado', currentVehicleId: vehicleId, vehiclePlate: data.plate, vehicleType: data.vehicleType, checkInTime: nowIso } : s))
     );
+
+    // Update Supabase parking_spaces table
+    parkVehicleSpaceCloud(data.spotId, data.plate, data.vehicleType, nowIso);
 
     setPrintVehicle(newVehicle);
   };
@@ -498,8 +539,9 @@ export default function App() {
   const handleDeleteVehicleService = (vehicle: ActiveVehicle) => {
     if (window.confirm(`¿Está seguro de eliminar el servicio para el vehículo ${vehicle.plate}? Esto liberará el espacio ${vehicle.spotId} sin registrar cobro.`)) {
       setSpots((prev) =>
-        prev.map((s) => (s.id === vehicle.spotId ? { ...s, status: 'disponible', currentVehicleId: undefined } : s))
+        prev.map((s) => (s.id === vehicle.spotId ? { ...s, status: 'disponible', currentVehicleId: undefined, vehiclePlate: undefined, vehicleType: undefined, checkInTime: undefined } : s))
       );
+      releaseVehicleSpaceCloud(vehicle.spotId);
       setActiveVehicles((prev) => prev.filter((v) => v.id !== vehicle.id));
       deleteActiveVehicleCloud(vehicle.id);
     }
@@ -570,8 +612,9 @@ export default function App() {
     }
 
     setSpots((prev) =>
-      prev.map((s) => (s.id === txData.vehicle.spotId ? { ...s, status: 'disponible', currentVehicleId: undefined } : s))
+      prev.map((s) => (s.id === txData.vehicle.spotId ? { ...s, status: 'disponible', currentVehicleId: undefined, vehiclePlate: undefined, vehicleType: undefined, checkInTime: undefined } : s))
     );
+    releaseVehicleSpaceCloud(txData.vehicle.spotId);
 
     setActiveVehicles((prev) => prev.filter((v) => v.id !== txData.vehicle.id));
     setTransactions((prev) => [newTransaction, ...prev]);

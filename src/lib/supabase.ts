@@ -7,6 +7,7 @@ import {
   WashOrder,
   Booking,
   ParkingSpot,
+  SpotStatus,
   StoreItem,
   StaffUser,
   VehicleClientRecord,
@@ -110,6 +111,7 @@ export async function fetchAllCloudData() {
       expensesRes,
       accountingRes,
       spotsRes,
+      spacesRes,
       bookingsRes,
       storeRes,
       staffRes,
@@ -122,6 +124,7 @@ export async function fetchAllCloudData() {
       supabase.from('expenses').select('*').order('date', { ascending: false }),
       supabase.from('accounting_entries').select('*').order('entry_number', { ascending: false }),
       supabase.from('parking_spots').select('*'),
+      supabase.from('parking_spaces').select('*'),
       supabase.from('bookings').select('*').order('date', { ascending: false }),
       supabase.from('store_items').select('*'),
       supabase.from('staff_users').select('*'),
@@ -212,10 +215,26 @@ export async function fetchAllCloudData() {
           })
         : null;
 
-    const spots: ParkingSpot[] | null =
-      spotsRes.status === 'fulfilled' && !spotsRes.value.error && spotsRes.value.data
-        ? spotsRes.value.data.map((row: any) => row.data || row)
-        : null;
+    const rawSpaces = spacesRes.status === 'fulfilled' && !spacesRes.value.error && spacesRes.value.data ? spacesRes.value.data : null;
+    const rawSpots = spotsRes.status === 'fulfilled' && !spotsRes.value.error && spotsRes.value.data ? spotsRes.value.data : null;
+
+    let spots: ParkingSpot[] | null = null;
+
+    if (rawSpaces && rawSpaces.length > 0) {
+      spots = rawSpaces.map((row: any) => ({
+        id: String(row.id),
+        label: row.label || `Espacio ${row.id}`,
+        zone: row.zone || 'Sector A',
+        typeAllowed: row.type_allowed || ['auto', 'camioneta', 'moto', 'furgon', 'suv'],
+        status: (row.status || 'disponible') as SpotStatus,
+        currentVehicleId: row.vehicle_plate ? `v-${row.vehicle_plate}` : undefined,
+        vehiclePlate: row.vehicle_plate || undefined,
+        vehicleType: row.vehicle_type || undefined,
+        checkInTime: row.check_in_time || undefined,
+      }));
+    } else if (rawSpots && rawSpots.length > 0) {
+      spots = rawSpots.map((row: any) => row.data || row);
+    }
 
     const bookings: Booking[] | null =
       bookingsRes.status === 'fulfilled' && !bookingsRes.value.error && bookingsRes.value.data
@@ -540,6 +559,134 @@ export async function syncClientReviewsCloud(reviews: ClientReview[]) {
     await supabase.from('client_reviews').upsert(rows, { onConflict: 'id' });
   } catch (err) {
     console.warn('Supabase client_reviews sync error:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// PARKING_SPACES DIRECT CRUD & REALTIME SUBSCRIPTION
+// -------------------------------------------------------------
+
+export async function fetchParkingSpacesCloud(): Promise<ParkingSpot[] | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase.from('parking_spaces').select('*');
+    if (error) {
+      console.warn('fetchParkingSpacesCloud query error:', error.message);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
+
+    return data.map((row: any) => ({
+      id: String(row.id),
+      label: row.label || `Espacio ${row.id}`,
+      zone: row.zone || 'Sector A',
+      typeAllowed: row.type_allowed || ['auto', 'camioneta', 'moto', 'furgon', 'suv'],
+      status: (row.status || 'disponible') as SpotStatus,
+      currentVehicleId: row.vehicle_plate ? `v-${row.vehicle_plate}` : undefined,
+      vehiclePlate: row.vehicle_plate || undefined,
+      vehicleType: row.vehicle_type || undefined,
+      checkInTime: row.check_in_time || undefined,
+    }));
+  } catch (err) {
+    console.warn('fetchParkingSpacesCloud error:', err);
+    return null;
+  }
+}
+
+export async function parkVehicleSpaceCloud(
+  spaceId: string,
+  plate: string,
+  vehicleType: string,
+  checkInTime: string
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    const payload = {
+      status: 'ocupado',
+      vehicle_plate: plate,
+      vehicle_type: vehicleType,
+      check_in_time: checkInTime,
+    };
+
+    // Try update by id or label
+    const { error } = await supabase
+      .from('parking_spaces')
+      .update(payload)
+      .eq('id', spaceId);
+
+    if (error) {
+      console.warn('parkVehicleSpaceCloud update by id error, trying by label:', error.message);
+      await supabase
+        .from('parking_spaces')
+        .update(payload)
+        .eq('label', spaceId);
+    }
+  } catch (err) {
+    console.warn('parkVehicleSpaceCloud error:', err);
+  }
+}
+
+export async function releaseVehicleSpaceCloud(spaceId: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    const payload = {
+      status: 'disponible',
+      vehicle_plate: null,
+      vehicle_type: null,
+      check_in_time: null,
+    };
+
+    const { error } = await supabase
+      .from('parking_spaces')
+      .update(payload)
+      .eq('id', spaceId);
+
+    if (error) {
+      console.warn('releaseVehicleSpaceCloud update by id error, trying by label:', error.message);
+      await supabase
+        .from('parking_spaces')
+        .update(payload)
+        .eq('label', spaceId);
+    }
+  } catch (err) {
+    console.warn('releaseVehicleSpaceCloud error:', err);
+  }
+}
+
+export function subscribeParkingSpacesRealtime(
+  onRealtimeChange: (row: any) => void
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel('public:parking_spaces')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'parking_spaces' },
+        (payload) => {
+          if (payload.new) {
+            onRealtimeChange(payload.new);
+          } else if (payload.old) {
+            onRealtimeChange(payload.old);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('subscribeParkingSpacesRealtime error:', err);
+    return () => {};
   }
 }
 

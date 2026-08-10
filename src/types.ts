@@ -18,10 +18,14 @@ export type SpotStatus = 'disponible' | 'ocupado' | 'reservado' | 'mantenimiento
 
 export interface ParkingSpot {
   id: string; // e.g. "A1", "A2", "B1"
+  label?: string;
   zone: string; // e.g. "Sector A", "Sector B", "VIP", "Motos"
   typeAllowed: VehicleType[];
   status: SpotStatus;
   currentVehicleId?: string;
+  vehiclePlate?: string;
+  vehicleType?: VehicleType;
+  checkInTime?: string;
   isNightlySpot?: boolean;
 }
 
