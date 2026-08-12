@@ -5,10 +5,10 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ADAPTADOR MAESTRO: Desvía las funciones de Firebase hacia Supabase
+// ADAPTADOR MAESTRO
 export const const_db = {}; 
 
-// Simulación de guardado para que tu frontend no se rompa y guarde en Supabase
+// Guardar o actualizar en Supabase
 export const setDoc = async (docRef: any, data: any) => {
   const spotId = docRef?.id || data?.spot_id || data?.space;
   
@@ -36,7 +36,10 @@ export const setDoc = async (docRef: any, data: any) => {
   if (error) console.error("Error en adaptador Supabase:", error);
 };
 
+// Escucha en tiempo real filtrada por cada espacio individual
 export const onSnapshot = (docRef: any, callback: any) => {
+  const targetId = docRef?.id; // Identifica qué espacio se está consultando (ej: 'main_app_state')
+
   const consultarYEnviar = async () => {
     const { data } = await supabase.from('active_vehicles').select('*');
     if (data) {
@@ -44,17 +47,29 @@ export const onSnapshot = (docRef: any, callback: any) => {
       data.forEach(item => {
         if (item.id) state[item.id] = item.data || item;
       });
-      callback({ 
-        exists: () => Object.keys(state).length > 0,
-        data: () => state 
-      });
+
+      // Si el frontend pregunta por el estado global de la app
+      if (targetId === 'main_app_state' || !targetId) {
+        callback({
+          exists: () => Object.keys(state).length > 0,
+          data: () => state
+        });
+      } else {
+        // Si pregunta por un espacio específico (ej: Espacio A1)
+        const especifico = state[targetId];
+        callback({
+          exists: () => !!especifico,
+          data: () => especifico || null
+        });
+      }
     }
   };
 
   consultarYEnviar();
 
+  // Suscribirse a los cambios de Supabase Realtime
   const channel = supabase
-    .channel('public:active_vehicles')
+    .channel(public:active_vehicles:${targetId || 'global'})
     .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => {
       consultarYEnviar();
     })
@@ -63,14 +78,23 @@ export const onSnapshot = (docRef: any, callback: any) => {
   return () => { supabase.removeChannel(channel); };
 };
 
-  return () => { supabase.removeChannel(channel); };
-};
-
-// Otras funciones vacías para que el compilador de Vite no tire error
+// Funciones complementarias para mantener compatibilidad
 export const initializeApp = () => ({});
 export const getApps = () => [];
 export const getApp = () => ({});
 export const getFirestore = () => ({});
 export const doc = (db: any, col: string, id: string) => ({ id, col });
 export const collection = () => ({});
-export const getDoc = async () => ({ exists: () => false, data: () => null });
+export const getDoc = async (docRef: any) => {
+  const targetId = docRef?.id;
+  const { data } = await supabase.from('active_vehicles').select('*');
+  const state: any = {};
+  if (data) {
+    data.forEach(item => { if (item.id) state[item.id] = item.data || item; });
+  }
+  const especifico = state[targetId];
+  return {
+    exists: () => !!especifico,
+    data: () => especifico || null
+  };
+};
