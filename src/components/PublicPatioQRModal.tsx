@@ -52,9 +52,35 @@ export const PublicPatioQRModal: React.FC<PublicPatioQRModalProps> = ({
     ? `${window.location.origin}/?view=patio_qr`
     : `https://autopark.app/?view=patio_qr`;
 
+  // Helper to determine spot occupancy by cross-referencing status and activeVehicles
+  const getSpotOccupancy = (spot: ParkingSpot) => {
+    const sId = spot.id.trim().toUpperCase();
+    const sLabel = (spot.label || '').trim().toUpperCase();
+    const sIdClean = sId.replace(/[^A-Z0-9]/g, '');
+
+    const matchingVehicle = activeVehicles.find((v) => {
+      if (!v.spotId && !spot.currentVehicleId) return false;
+      if (spot.currentVehicleId && v.id === spot.currentVehicleId) return true;
+      if (!v.spotId) return false;
+
+      const vSpot = v.spotId.trim().toUpperCase();
+      const vSpotClean = vSpot.replace(/[^A-Z0-9]/g, '');
+
+      return (
+        vSpot === sId ||
+        (sLabel && vSpot === sLabel) ||
+        (sIdClean.length > 0 && vSpotClean === sIdClean) ||
+        (spot.vehiclePlate && v.plate && spot.vehiclePlate.trim().toUpperCase() === v.plate.trim().toUpperCase())
+      );
+    });
+
+    const isOccupied = spot.status === 'ocupado' || !!matchingVehicle;
+    return { isOccupied, matchingVehicle };
+  };
+
   // Calculate statistics
   const totalSpots = spots.length;
-  const occupiedSpotsCount = spots.filter(s => s.status === 'ocupado').length;
+  const occupiedSpotsCount = spots.filter((s) => getSpotOccupancy(s).isOccupied).length;
   const freeSpotsCount = Math.max(0, totalSpots - occupiedSpotsCount);
   const occupancyPercentage = totalSpots > 0 ? Math.round((occupiedSpotsCount / totalSpots) * 100) : 0;
 
@@ -313,10 +339,10 @@ export const PublicPatioQRModal: React.FC<PublicPatioQRModalProps> = ({
               {/* Grid Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {filteredSpots.map((spot) => {
-                  const isOccupied = spot.status === 'ocupado';
-                  const assignedVehicle = spot.vehiclePlate
+                  const { isOccupied, matchingVehicle } = getSpotOccupancy(spot);
+                  const assignedVehicle = matchingVehicle || (spot.vehiclePlate
                     ? activeVehicles.find(v => v.plate.toUpperCase() === spot.vehiclePlate?.toUpperCase())
-                    : activeVehicles.find(v => v.spotId === spot.id);
+                    : activeVehicles.find(v => v.spotId === spot.id));
 
                   return (
                     <div

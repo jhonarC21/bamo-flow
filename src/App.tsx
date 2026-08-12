@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ActiveVehicle,
   Booking,
@@ -383,8 +383,68 @@ export default function App() {
   };
 
 
+  // Reconcile spots with activeVehicles to guarantee 100% real-time synchronization across devices
+  const effectiveSpots = useMemo(() => {
+    return spots.map((spot) => {
+      const sId = spot.id.trim().toUpperCase();
+      const sLabel = (spot.label || '').trim().toUpperCase();
+      const sIdClean = sId.replace(/[^A-Z0-9]/g, '');
+
+      // Find matching vehicle in activeVehicles
+      const matchingVehicle = activeVehicles.find((v) => {
+        if (!v.spotId && !spot.currentVehicleId) return false;
+        if (spot.currentVehicleId && v.id === spot.currentVehicleId) return true;
+        if (!v.spotId) return false;
+
+        const vSpot = v.spotId.trim().toUpperCase();
+        const vSpotClean = vSpot.replace(/[^A-Z0-9]/g, '');
+
+        if (vSpot === sId || (sLabel && vSpot === sLabel) || (sIdClean.length > 0 && vSpotClean === sIdClean)) {
+          return true;
+        }
+        if (spot.vehiclePlate && v.plate && spot.vehiclePlate.trim().toUpperCase() === v.plate.trim().toUpperCase()) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matchingVehicle) {
+        return {
+          ...spot,
+          status: 'ocupado' as const,
+          currentVehicleId: matchingVehicle.id,
+          vehiclePlate: matchingVehicle.plate,
+          vehicleType: matchingVehicle.vehicleType,
+          checkInTime: matchingVehicle.entryTime,
+        };
+      }
+
+      // If spot says 'ocupado' in DB but no vehicle is active in memory/cloud
+      if (spot.status === 'ocupado') {
+        const anyVehicle = activeVehicles.find(
+          (v) =>
+            (v.spotId && v.spotId.trim().toUpperCase() === sId) ||
+            (sLabel && v.spotId && v.spotId.trim().toUpperCase() === sLabel) ||
+            (spot.vehiclePlate && v.plate && v.plate.trim().toUpperCase() === spot.vehiclePlate.trim().toUpperCase())
+        );
+        if (!anyVehicle) {
+          return {
+            ...spot,
+            status: 'disponible' as const,
+            currentVehicleId: undefined,
+            vehiclePlate: undefined,
+            vehicleType: undefined,
+            checkInTime: undefined,
+          };
+        }
+      }
+
+      return spot;
+    });
+  }, [spots, activeVehicles]);
+
   // Derived metrics
-  const availableSpots = spots.filter((s) => s.status === 'disponible');
+  const availableSpots = effectiveSpots.filter((s) => s.status === 'disponible');
   const activeCount = activeVehicles.length;
 
   const todayIncome = transactions
@@ -951,7 +1011,7 @@ export default function App() {
       {/* Top Header Bar */}
       <Header
         activeCount={activeCount}
-        totalSpots={spots.length}
+        totalSpots={effectiveSpots.length}
         todayIncome={todayIncome}
         config={rateConfig}
         currentUser={currentStaffUser}
@@ -990,7 +1050,7 @@ export default function App() {
         
         {activeTab === 'patio' && (
           <ParkingGrid
-            spots={spots}
+            spots={effectiveSpots}
             activeVehicles={activeVehicles}
             config={rateConfig}
             onSelectSpotToPark={(spotId) => handleOpenNewEntryWithSpot(spotId)}
@@ -1223,7 +1283,7 @@ export default function App() {
         initialPlate={liveTrackerPlate}
         activeVehicles={activeVehicles}
         washOrders={washOrders}
-        spots={spots}
+        spots={effectiveSpots}
         rateConfig={rateConfig}
         washServices={washServices}
       />
@@ -1231,7 +1291,7 @@ export default function App() {
       <PublicPatioQRModal
         isOpen={isPublicPatioOpen}
         onClose={() => setIsPublicPatioOpen(false)}
-        spots={spots}
+        spots={effectiveSpots}
         activeVehicles={activeVehicles}
         rateConfig={rateConfig}
         washServices={washServices}

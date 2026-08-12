@@ -109,12 +109,40 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
   // Unique zones
   const zones = Array.from(new Set(spots.map((s) => s.zone)));
 
+  // Helper to get spot occupancy by matching spot with activeVehicles
+  const getSpotOccupancy = (spot: ParkingSpot) => {
+    const sId = spot.id.trim().toUpperCase();
+    const sLabel = (spot.label || '').trim().toUpperCase();
+    const sIdClean = sId.replace(/[^A-Z0-9]/g, '');
+
+    const vehicle = activeVehicles.find((v) => {
+      if (spot.currentVehicleId && v.id === spot.currentVehicleId) return true;
+      if (!v.spotId) return false;
+      const vSpot = v.spotId.trim().toUpperCase();
+      const vSpotClean = vSpot.replace(/[^A-Z0-9]/g, '');
+
+      return (
+        vSpot === sId ||
+        (sLabel && vSpot === sLabel) ||
+        (sIdClean.length > 0 && vSpotClean === sIdClean) ||
+        (spot.vehiclePlate && v.plate && spot.vehiclePlate.trim().toUpperCase() === v.plate.trim().toUpperCase())
+      );
+    });
+
+    const isOccupied = spot.status === 'ocupado' || !!vehicle;
+    return { isOccupied, vehicle };
+  };
+
+  // Status Filter
+  const freeSpotsCount = spots.filter((s) => !getSpotOccupancy(s).isOccupied).length;
+  const occupiedSpotsCount = spots.filter((s) => getSpotOccupancy(s).isOccupied).length;
+
   const filteredSpots = spots.filter((spot) => {
-    const vehicle = activeVehicles.find((v) => v.spotId === spot.id || v.id === spot.currentVehicleId);
+    const { isOccupied, vehicle } = getSpotOccupancy(spot);
     
     if (selectedZone !== 'todos' && spot.zone !== selectedZone) return false;
-    if (selectedStatus === 'disponibles' && spot.status !== 'disponible') return false;
-    if (selectedStatus === 'ocupadas' && spot.status !== 'ocupado') return false;
+    if (selectedStatus === 'disponibles' && isOccupied) return false;
+    if (selectedStatus === 'ocupadas' && !isOccupied) return false;
     
     if (categoryFilter === 'nocturno') {
       if (spot.isNightlySpot) return true;
@@ -194,7 +222,6 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
           ))}
         </div>
 
-        {/* Status Filter */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Estado:</span>
           <button
@@ -211,7 +238,7 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
               selectedStatus === 'disponibles' ? 'bg-emerald-600 text-white' : 'bg-slate-800/60 text-slate-400'
             }`}
           >
-            Libres ({spots.filter((s) => s.status === 'disponible').length})
+            Libres ({freeSpotsCount})
           </button>
           <button
             onClick={() => setSelectedStatus('ocupadas')}
@@ -219,7 +246,7 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
               selectedStatus === 'ocupadas' ? 'bg-amber-600 text-white' : 'bg-slate-800/60 text-slate-400'
             }`}
           >
-            Ocupadas ({spots.filter((s) => s.status === 'ocupado').length})
+            Ocupadas ({occupiedSpotsCount})
           </button>
         </div>
 
@@ -237,10 +264,10 @@ export const ParkingGrid: React.FC<ParkingGridProps> = ({
       {/* Grid of Spots */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredSpots.map((spot) => {
-          const vehicle = activeVehicles.find((v) => v.spotId === spot.id || v.id === spot.currentVehicleId);
-          const isOccupied = spot.status === 'ocupado' && vehicle;
+          const { isOccupied, vehicle: matchedVehicle } = getSpotOccupancy(spot);
+          const vehicle = matchedVehicle || activeVehicles.find((v) => v.spotId === spot.id || v.id === spot.currentVehicleId);
 
-          if (!isOccupied) {
+          if (!isOccupied || !vehicle) {
             return (
               <div
                 key={spot.id}
