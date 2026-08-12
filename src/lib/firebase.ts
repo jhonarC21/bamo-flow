@@ -36,34 +36,32 @@ export const setDoc = async (docRef: any, data: any) => {
   if (error) console.error("Error en adaptador Supabase:", error);
 };
 
-// Simulación de escucha en tiempo real multidispositivo usando Supabase Realtime
 export const onSnapshot = (docRef: any, callback: any) => {
-  // Traer los datos iniciales
-  supabase.from('active_vehicles').select('*').then(({ data }) => {
+  const consultarYEnviar = async () => {
+    const { data } = await supabase.from('active_vehicles').select('*');
     if (data) {
       const state: any = {};
       data.forEach(item => {
         if (item.id) state[item.id] = item.data || item;
       });
-      callback({ data: () => state });
+      callback({ 
+        exists: () => Object.keys(state).length > 0,
+        data: () => state 
+      });
     }
-  });
+  };
 
-  // Escuchar cambios en vivo para actualizar tu celular al instante
+  consultarYEnviar();
+
   const channel = supabase
     .channel('public:active_vehicles')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => {
-      supabase.from('active_vehicles').select('*').then(({ data }) => {
-        if (data) {
-          const state: any = {};
-          data.forEach(item => {
-            if (item.id) state[item.id] = item.data || item;
-          });
-          callback({ data: () => state });
-        }
-      });
+      consultarYEnviar();
     })
     .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+};
 
   return () => { supabase.removeChannel(channel); };
 };
