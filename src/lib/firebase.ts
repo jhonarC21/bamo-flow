@@ -12,6 +12,7 @@ export const const_db = {};
 export const setDoc = async (docRef: any, data: any) => {
   const spotId = docRef?.id || data?.spot_id || data?.space;
   
+  // Guardamos el objeto exacto que envía la app en la columna data para no perder nada
   const { error } = await supabase
     .from('active_vehicles')
     .upsert({
@@ -36,27 +37,38 @@ export const setDoc = async (docRef: any, data: any) => {
   if (error) console.error("Error en adaptador Supabase:", error);
 };
 
-// Escucha en tiempo real filtrada por cada espacio individual
+// Escucha en tiempo real multidispositivo ultra-compatible
 export const onSnapshot = (docRef: any, callback: any) => {
-  const targetId = docRef?.id; // Identifica qué espacio se está consultando (ej: 'main_app_state')
+  const targetId = docRef?.id;
 
   const consultarYEnviar = async () => {
     const { data } = await supabase.from('active_vehicles').select('*');
     if (data) {
       const state: any = {};
+      
+      // Mapeamos los datos en dos formatos a la vez para asegurar compatibilidad
       data.forEach(item => {
-        if (item.id) state[item.id] = item.data || item;
+        if (item.id) {
+          // Formato 1: Guardado directo en la raíz del ID
+          state[item.id] = item.data || item;
+          // Formato 2: Si tu código busca dentro de un sub-objeto 'vehicles'
+          if (!state.vehicles) state.vehicles = {};
+          state.vehicles[item.id] = item.data || item;
+          // Formato 3: Si tu código busca dentro de un sub-objeto 'spots'
+          if (!state.spots) state.spots = {};
+          state.spots[item.id] = item.data || item;
+        }
       });
 
-      // Si el frontend pregunta por el estado global de la app
+      // Si es el estado general o la app busca el documento maestro
       if (targetId === 'main_app_state' || !targetId) {
         callback({
-          exists: () => Object.keys(state).length > 0,
+          exists: () => true,
           data: () => state
         });
       } else {
-        // Si pregunta por un espacio específico (ej: Espacio A1)
-        const especifico = state[targetId];
+        // Consulta de tarjeta individual
+        const especifico = state[targetId] || (state.vehicles && state.vehicles[targetId]);
         callback({
           exists: () => !!especifico,
           data: () => especifico || null
@@ -67,7 +79,6 @@ export const onSnapshot = (docRef: any, callback: any) => {
 
   consultarYEnviar();
 
-  // Suscribirse a los cambios de Supabase Realtime
   const channel = supabase
     .channel(public:active_vehicles:${targetId || 'global'})
     .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => {
@@ -88,11 +99,17 @@ export const collection = () => ({});
 export const getDoc = async (docRef: any) => {
   const targetId = docRef?.id;
   const { data } = await supabase.from('active_vehicles').select('*');
-  const state: any = {};
+  const state: any = { vehicles: {}, spots: {} };
   if (data) {
-    data.forEach(item => { if (item.id) state[item.id] = item.data || item; });
+    data.forEach(item => { 
+      if (item.id) {
+        state[item.id] = item.data || item;
+        state.vehicles[item.id] = item.data || item;
+        state.spots[item.id] = item.data || item;
+      }
+    });
   }
-  const especifico = state[targetId];
+  const especifico = state[targetId] || state.vehicles[targetId];
   return {
     exists: () => !!especifico,
     data: () => especifico || null
