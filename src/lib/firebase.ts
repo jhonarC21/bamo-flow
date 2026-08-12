@@ -1,18 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Inicializar el cliente nativo de Supabase con tus variables de Vite
+// Inicializar el cliente nativo de Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ADAPTADOR MAESTRO
 export const const_db = {}; 
 
-// Guardar o actualizar en Supabase
+// Guardar o actualizar datos en la nube
 export const setDoc = async (docRef: any, data: any) => {
   const spotId = docRef?.id || data?.spot_id || data?.space;
   
-  // Guardamos el objeto exacto que envía la app en la columna data para no perder nada
   const { error } = await supabase
     .from('active_vehicles')
     .upsert({
@@ -34,62 +32,53 @@ export const setDoc = async (docRef: any, data: any) => {
       data: data
     });
 
-  if (error) console.error("Error en adaptador Supabase:", error);
+  if (error) console.error("Error al guardar:", error);
 };
 
-// Escucha en tiempo real multidispositivo ultra-compatible
+// Sincronización optimizada para navegadores de escritorio y celulares
 export const onSnapshot = (docRef: any, callback: any) => {
   const targetId = docRef?.id;
 
-  const consultarYEnviar = async () => {
-    const { data } = await supabase.from('active_vehicles').select('*');
-    if (data) {
-      const state: any = {};
-      
-      // Mapeamos los datos en dos formatos a la vez para asegurar compatibilidad
-      data.forEach(item => {
-        if (item.id) {
-          // Formato 1: Guardado directo en la raíz del ID
-          state[item.id] = item.data || item;
-          // Formato 2: Si tu código busca dentro de un sub-objeto 'vehicles'
-          if (!state.vehicles) state.vehicles = {};
-          state.vehicles[item.id] = item.data || item;
-          // Formato 3: Si tu código busca dentro de un sub-objeto 'spots'
-          if (!state.spots) state.spots = {};
-          state.spots[item.id] = item.data || item;
-        }
-      });
-
-      // Si es el estado general o la app busca el documento maestro
-      if (targetId === 'main_app_state' || !targetId) {
-        callback({
-          exists: () => true,
-          data: () => state
-        });
-      } else {
-        // Consulta de tarjeta individual
-        const especifico = state[targetId] || (state.vehicles && state.vehicles[targetId]);
-        callback({
-          exists: () => !!especifico,
-          data: () => especifico || null
-        });
+  const emitirDatos = (listaVehiculos: any[]) => {
+    const state: any = { vehicles: {}, spots: {} };
+    
+    listaVehiculos.forEach(item => {
+      if (item.id) {
+        const payload = item.data || item;
+        state[item.id] = payload;
+        state.vehicles[item.id] = payload;
+        state.spots[item.id] = payload;
       }
+    });
+
+    if (targetId === 'main_app_state' || !targetId) {
+      callback({ exists: () => true, data: () => state });
+    } else {
+      const especifico = state[targetId] || state.vehicles[targetId] || state.spots[targetId];
+      callback({ exists: () => !!especifico, data: () => especifico || null });
     }
   };
 
-  consultarYEnviar();
+  // Primera carga de datos
+  supabase.from('active_vehicles').select('*').then(({ data }) => {
+    if (data) emitirDatos(data);
+  });
 
+  // Escucha activa Realtime (Mismo canal simplificado para evitar bloqueos en móvil)
   const channel = supabase
-    .channel(public:active_vehicles:${targetId || 'global'})
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => {
-      consultarYEnviar();
+    .channel('cambios-estacionamiento')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, (payload) => {
+      // En vez de reconsultar todo, refrescamos la vista de inmediato
+      supabase.from('active_vehicles').select('*').then(({ data }) => {
+        if (data) emitirDatos(data);
+      });
     })
     .subscribe();
 
   return () => { supabase.removeChannel(channel); };
 };
 
-// Funciones complementarias para mantener compatibilidad
+// Mantener compatibilidad del sistema
 export const initializeApp = () => ({});
 export const getApps = () => [];
 export const getApp = () => ({});
@@ -101,17 +90,14 @@ export const getDoc = async (docRef: any) => {
   const { data } = await supabase.from('active_vehicles').select('*');
   const state: any = { vehicles: {}, spots: {} };
   if (data) {
-    data.forEach(item => { 
+    data.forEach(item => {
       if (item.id) {
-        state[item.id] = item.data || item;
-        state.vehicles[item.id] = item.data || item;
-        state.spots[item.id] = item.data || item;
+        const payload = item.data || item;
+        state[item.id] = payload;
+        state.vehicles[item.id] = payload;
       }
     });
   }
   const especifico = state[targetId] || state.vehicles[targetId];
-  return {
-    exists: () => !!especifico,
-    data: () => especifico || null
-  };
+  return { exists: () => !!especifico, data: () => especifico || null };
 };
