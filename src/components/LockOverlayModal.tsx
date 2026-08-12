@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, KeyRound, ShieldAlert, Eye, EyeOff, ShieldCheck, UserCheck, User, Sparkles, LogIn, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Lock, KeyRound, ShieldAlert, Eye, EyeOff, ShieldCheck, UserCheck, User, Sparkles, LogIn, ChevronRight, CheckCircle2, QrCode } from 'lucide-react';
 import { StaffUser, AppConfig } from '../types';
 
 interface LockOverlayModalProps {
@@ -8,6 +8,7 @@ interface LockOverlayModalProps {
   currentStaffUser: StaffUser;
   appConfig: AppConfig;
   onUnlock: (authenticatedUser: StaffUser) => void;
+  onOpenPublicPatio?: () => void;
 }
 
 export const LockOverlayModal: React.FC<LockOverlayModalProps> = ({
@@ -16,6 +17,7 @@ export const LockOverlayModal: React.FC<LockOverlayModalProps> = ({
   currentStaffUser,
   appConfig,
   onUnlock,
+  onOpenPublicPatio,
 }) => {
   if (!isLocked) return null;
 
@@ -116,6 +118,26 @@ export const LockOverlayModal: React.FC<LockOverlayModalProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Public Client Patio QR Access Button */}
+        {onOpenPublicPatio && (
+          <button
+            type="button"
+            onClick={onOpenPublicPatio}
+            className="w-full py-3 px-4 rounded-2xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 text-xs font-extrabold flex items-center justify-between gap-2 shadow-lg cursor-pointer transition-all hover:scale-[1.02]"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-600/30 border border-emerald-400/40 text-emerald-300">
+                <QrCode className="w-5 h-5 shrink-0 animate-pulse" />
+              </div>
+              <div className="text-left">
+                <span className="block font-black text-emerald-300 text-xs">📱 Ver QR y Estado del Patio (Clientes)</span>
+                <span className="block text-[10px] text-emerald-400/80 font-normal">Información sin clave (Solo lectura)</span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-emerald-400 shrink-0" />
+          </button>
+        )}
 
         {/* Success message banner */}
         {successMsg && (

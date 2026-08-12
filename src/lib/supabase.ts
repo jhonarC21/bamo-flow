@@ -690,6 +690,29 @@ export function subscribeParkingSpacesRealtime(
   }
 }
 
+export function subscribeAllRealtimeCloud(onAnyChange: () => void) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel('public:all_tables')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parking_spaces' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wash_orders' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => onAnyChange())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('subscribeAllRealtimeCloud error:', err);
+    return () => {};
+  }
+}
+
 
 // SQL DDL Schema generator for easy copy-paste into Supabase SQL Editor
 export const SUPABASE_SQL_SCHEMA = `-- ESQUEMA COMPLETO DE TABLAS PARA AUTOPARK Y CARWASH EN SUPABASE

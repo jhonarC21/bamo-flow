@@ -79,6 +79,7 @@ import { PlateEngravingSection } from './components/PlateEngravingSection';
 import { AccountingSection } from './components/AccountingSection';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { LiveVehicleTrackerModal } from './components/LiveVehicleTrackerModal';
+import { PublicPatioQRModal } from './components/PublicPatioQRModal';
 import { LockOverlayModal } from './components/LockOverlayModal';
 import {
   fetchAllCloudData,
@@ -98,6 +99,7 @@ import {
   parkVehicleSpaceCloud,
   releaseVehicleSpaceCloud,
   subscribeParkingSpacesRealtime,
+  subscribeAllRealtimeCloud,
 } from './utils/supabase';
 
 export default function App() {
@@ -172,21 +174,30 @@ export default function App() {
   const [printVehicle, setPrintVehicle] = useState<ActiveVehicle | null>(null);
   const [printTransaction, setPrintTransaction] = useState<Transaction | null>(null);
 
-  // Live Tracker Modal
+  // Live Tracker & Public Patio Modal
   const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
   const [liveTrackerPlate, setLiveTrackerPlate] = useState('');
+  const [isPublicPatioOpen, setIsPublicPatioOpen] = useState(false);
 
   // App Lock Security State
   const [isAppLocked, setIsAppLocked] = useState<boolean>(true);
 
-  // Check URL params on mount (e.g. ?track_plate=KDJF-84)
+  // Check URL params on mount (e.g. ?track_plate=KDJF-84 or ?view=patio_qr)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const plateParam = params.get('track_plate');
+      const viewParam = params.get('view');
+      const publicParam = params.get('public');
+      const patioParam = params.get('patio');
+
       if (plateParam) {
         setLiveTrackerPlate(plateParam.toUpperCase());
         setIsLiveTrackerOpen(true);
+      }
+
+      if (viewParam === 'patio_qr' || viewParam === 'patio' || publicParam === 'true' || patioParam === 'true') {
+        setIsPublicPatioOpen(true);
       }
     }
   }, []);
@@ -225,7 +236,7 @@ export default function App() {
     loadCloudData();
 
     // Subscribe to real-time changes on parking_spaces in Supabase via .onPostgresChanges
-    const unsubscribeRealtime = subscribeParkingSpacesRealtime((updatedRow) => {
+    const unsubscribeRealtimeSpaces = subscribeParkingSpacesRealtime((updatedRow) => {
       if (!updatedRow) return;
       const updatedId = String(updatedRow.id);
       setSpots((prev) =>
@@ -245,14 +256,20 @@ export default function App() {
       );
     });
 
-    // Auto-refresh every 5 seconds for multi-device synchronization
+    // Subscribe to all changes in Supabase (vehicles, transactions, wash orders, etc)
+    const unsubscribeAllRealtime = subscribeAllRealtimeCloud(() => {
+      loadCloudData();
+    });
+
+    // Auto-refresh every 5 seconds as fallback for multi-device synchronization
     const syncTimer = setInterval(() => {
       loadCloudData();
     }, 5000);
 
     return () => {
       clearInterval(syncTimer);
-      unsubscribeRealtime();
+      unsubscribeRealtimeSpaces();
+      unsubscribeAllRealtime();
     };
   }, [loadCloudData]);
 
@@ -947,6 +964,7 @@ export default function App() {
           setLiveTrackerPlate('');
           setIsLiveTrackerOpen(true);
         }}
+        onOpenPublicPatio={() => setIsPublicPatioOpen(true)}
         onLockPlatform={() => {
           setIsAppLocked(true);
           localStorage.setItem('autopark_is_locked', 'true');
@@ -1210,6 +1228,16 @@ export default function App() {
         washServices={washServices}
       />
 
+      <PublicPatioQRModal
+        isOpen={isPublicPatioOpen}
+        onClose={() => setIsPublicPatioOpen(false)}
+        spots={spots}
+        activeVehicles={activeVehicles}
+        rateConfig={rateConfig}
+        washServices={washServices}
+        washOrders={washOrders}
+      />
+
       <LockOverlayModal
         isLocked={isAppLocked}
         staffUsers={staffUsers}
@@ -1221,6 +1249,7 @@ export default function App() {
           setIsAppLocked(false);
           localStorage.setItem('autopark_is_locked', 'false');
         }}
+        onOpenPublicPatio={() => setIsPublicPatioOpen(true)}
       />
 
     </div>

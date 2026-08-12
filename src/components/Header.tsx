@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car, Clock, DollarSign, PlusCircle, Settings, ShieldAlert, Sparkles, RefreshCw, UserCheck, Shield, ShoppingBag, CarFront, User, Lock, KeyRound, X, Database, Eye } from 'lucide-react';
+import { Car, Clock, DollarSign, PlusCircle, Settings, ShieldAlert, Sparkles, RefreshCw, UserCheck, Shield, ShoppingBag, CarFront, User, Lock, KeyRound, X, Database, Eye, QrCode } from 'lucide-react';
 import { RateConfig, StaffUser, UserRole, AppConfig } from '../types';
 import { formatCurrency } from '../utils/pricing';
 import { initialStaffUsers } from '../data/initialData';
@@ -17,6 +17,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenSupabase?: () => void;
   onOpenLiveTracker?: () => void;
+  onOpenPublicPatio?: () => void;
   onLockPlatform?: () => void;
   currentTime: Date;
 }
@@ -41,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenSupabase,
   onOpenLiveTracker,
+  onOpenPublicPatio,
   onLockPlatform,
   currentTime,
 }) => {
@@ -231,6 +233,17 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Quick Actions */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800/80">
+              {onOpenPublicPatio && (
+                <button
+                  onClick={onOpenPublicPatio}
+                  className="bg-[#0e1d18] hover:bg-emerald-950 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap border border-emerald-500/30 shadow-md"
+                  title="Ver Código QR e Información Pública del Patio"
+                >
+                  <QrCode className="w-4 h-4 text-emerald-400" />
+                  <span className="hidden md:inline">QR Patio</span>
+                </button>
+              )}
+
               {onOpenLiveTracker && (
                 <button
                   onClick={onOpenLiveTracker}
