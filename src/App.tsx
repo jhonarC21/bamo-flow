@@ -92,6 +92,8 @@ import {
   syncAccountingEntryCloud,
   syncBookingCloud,
   syncSpotsCloud,
+  saveParkingSpacesCloud,
+  deleteParkingSpaceCloud,
   syncStoreCatalogCloud,
   syncStaffUsersCloud,
   syncClientRecordsCloud,
@@ -262,47 +264,8 @@ export default function App() {
       loadCloudData();
     });
 
-    // Subscribe to CRM/Metrics real-time changes to instantly unpack vehicles & update patio map + counters
-    const unsubscribeCrmRealtime = subscribeCrmMetricsRealtime(({ unpackedVehicles }) => {
-      if (unpackedVehicles && unpackedVehicles.length > 0) {
-        unpackedVehicles.forEach((vehicle) => {
-          // Instantly update activeVehicles state
-          setActiveVehicles((prev) => {
-            const cleanPlate = vehicle.plate.trim().toUpperCase();
-            const existingIndex = prev.findIndex(
-              (v) => v.id === vehicle.id || (v.plate && v.plate.trim().toUpperCase() === cleanPlate)
-            );
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = { ...updated[existingIndex], ...vehicle };
-              return updated;
-            }
-            return [vehicle, ...prev];
-          });
-
-          // Instantly update spot status in patio map
-          if (vehicle.spotId) {
-            const cleanSpotId = vehicle.spotId.trim().toUpperCase();
-            setSpots((prev) =>
-              prev.map((s) => {
-                const sId = s.id.trim().toUpperCase();
-                const sLabel = (s.label || '').trim().toUpperCase();
-                if (sId === cleanSpotId || (sLabel && sLabel === cleanSpotId)) {
-                  return {
-                    ...s,
-                    status: 'ocupado',
-                    currentVehicleId: vehicle.id,
-                    vehiclePlate: vehicle.plate,
-                    vehicleType: vehicle.vehicleType,
-                    checkInTime: vehicle.entryTime,
-                  };
-                }
-                return s;
-              })
-            );
-          }
-        });
-      }
+    // Subscribe to CRM/Metrics real-time changes (pure customer history sync)
+    const unsubscribeCrmRealtime = subscribeCrmMetricsRealtime(() => {
       loadCloudData();
     });
 
@@ -321,81 +284,87 @@ export default function App() {
 
 
 
-  // Parking Spots CRUD Handlers
-  const handleAddSpot = (newSpot: ParkingSpot) => {
-    setSpots((prev) => {
-      if (prev.some((s) => s.id.toUpperCase() === newSpot.id.toUpperCase())) {
-        alert(`El puesto "${newSpot.id}" ya existe.`);
-        return prev;
-      }
-      return [...prev, newSpot];
-    });
+  // Parking Spots CRUD Handlers with Real-Time Supabase Persistence
+  const handleAddSpot = async (newSpot: ParkingSpot) => {
+    if (spots.some((s) => s.id.toUpperCase() === newSpot.id.toUpperCase())) {
+      alert(`El puesto "${newSpot.id}" ya existe.`);
+      return;
+    }
+    const updated = [...spots, newSpot];
+    setSpots(updated);
+    await saveParkingSpacesCloud(updated);
   };
 
-  const handleUpdateSpot = (updatedSpot: ParkingSpot) => {
-    setSpots((prev) => prev.map((s) => (s.id === updatedSpot.id ? updatedSpot : s)));
+  const handleUpdateSpot = async (updatedSpot: ParkingSpot) => {
+    const updated = spots.map((s) => (s.id === updatedSpot.id ? updatedSpot : s));
+    setSpots(updated);
     if (updatedSpot.status === 'disponible') {
-      releaseVehicleSpaceCloud(updatedSpot.id);
+      await releaseVehicleSpaceCloud(updatedSpot.id);
     } else if (updatedSpot.status === 'ocupado' && updatedSpot.vehiclePlate) {
-      parkVehicleSpaceCloud(
+      await parkVehicleSpaceCloud(
         updatedSpot.id,
         updatedSpot.vehiclePlate,
         updatedSpot.vehicleType || 'auto',
         updatedSpot.checkInTime || new Date().toISOString()
       );
     }
+    await saveParkingSpacesCloud(updated);
   };
 
-  const handleDeleteSpot = (spotId: string) => {
+  const handleDeleteSpot = async (spotId: string) => {
     const isOccupied = activeVehicles.some((v) => v.spotId === spotId || v.id === spotId);
     if (isOccupied) {
       alert(`No se puede eliminar el puesto "${spotId}" porque está actualmente ocupado.`);
       return;
     }
-    setSpots((prev) => prev.filter((s) => s.id !== spotId));
+    const updated = spots.filter((s) => s.id !== spotId);
+    setSpots(updated);
+    await deleteParkingSpaceCloud(spotId);
+    await saveParkingSpacesCloud(updated);
   };
 
-  const handleSetTotalSpotsCount = (newCount: number) => {
-    setSpots((prev) => {
-      if (newCount === prev.length) return prev;
+  const handleSetTotalSpotsCount = async (newCount: number) => {
+    if (newCount === spots.length) return;
 
-      if (newCount > prev.length) {
-        const countToAdd = newCount - prev.length;
-        const newSpots: ParkingSpot[] = [];
-        for (let i = 1; i <= countToAdd; i++) {
-          const nextNum = prev.length + i;
-          let spotId = `A${nextNum}`;
-          if (prev.some((s) => s.id === spotId) || newSpots.some((s) => s.id === spotId)) {
-            spotId = `P${nextNum}`;
-          }
-          newSpots.push({
-            id: spotId,
-            zone: 'Sector A',
-            typeAllowed: ['auto', 'suv', 'camioneta'],
-            status: 'disponible',
-          });
+    let updated: ParkingSpot[] = [];
+    if (newCount > spots.length) {
+      const countToAdd = newCount - spots.length;
+      const newSpots: ParkingSpot[] = [];
+      for (let i = 1; i <= countToAdd; i++) {
+        const nextNum = spots.length + i;
+        let spotId = `A${nextNum}`;
+        if (spots.some((s) => s.id === spotId) || newSpots.some((s) => s.id === spotId)) {
+          spotId = `P${nextNum}`;
         }
-        return [...prev, ...newSpots];
-      } else {
-        const countToRemove = prev.length - newCount;
-        let removed = 0;
-        const updated = [...prev];
-
-        for (let i = updated.length - 1; i >= 0 && removed < countToRemove; i--) {
-          const spot = updated[i];
-          const isOccupied = activeVehicles.some((v) => v.spotId === spot.id || v.id === spot.currentVehicleId);
-          if (spot.status === 'disponible' && !isOccupied) {
-            updated.splice(i, 1);
-            removed++;
-          }
-        }
-
-        if (removed < countToRemove) {
-          alert(`Se redujeron ${removed} puestos libres. Los puestos ocupados no fueron eliminados para resguardar la seguridad.`);
-        }
-        return updated;
+        newSpots.push({
+          id: spotId,
+          zone: 'Sector A',
+          typeAllowed: ['auto', 'suv', 'camioneta'],
+          status: 'disponible',
+        });
       }
-    });
+      updated = [...spots, ...newSpots];
+    } else {
+      const countToRemove = spots.length - newCount;
+      let removed = 0;
+      updated = [...spots];
+
+      for (let i = updated.length - 1; i >= 0 && removed < countToRemove; i--) {
+        const spot = updated[i];
+        const isOccupied = activeVehicles.some((v) => v.spotId === spot.id || v.id === spot.currentVehicleId);
+        if (spot.status === 'disponible' && !isOccupied) {
+          updated.splice(i, 1);
+          removed++;
+        }
+      }
+
+      if (removed < countToRemove) {
+        alert(`Se redujeron ${removed} puestos libres. Los puestos ocupados no fueron eliminados para resguardar la seguridad.`);
+      }
+    }
+
+    setSpots(updated);
+    await saveParkingSpacesCloud(updated);
   };
 
   // Car Wash Services CRUD Handlers

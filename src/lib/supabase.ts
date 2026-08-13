@@ -468,22 +468,76 @@ export async function syncBookingCloud(booking: Booking) {
 }
 
 // 8. Bulk Sync helpers for spots, catalog, staff users, client records, reviews
-export async function syncSpotsCloud(spots: ParkingSpot[]) {
+export async function saveParkingSpacesCloud(spots: ParkingSpot[]) {
   const supabase = getSupabaseClient();
   if (!supabase) return;
 
   try {
-    const rows = spots.map((s) => ({
-      id: s.id,
+    // 1. Fetch current existing spots from Supabase table 'parking_spaces'
+    const { data: existingData } = await supabase.from('parking_spaces').select('id');
+    const existingIds = (existingData || []).map((row: any) => String(row.id));
+
+    const newIds = new Set(spots.map((s) => String(s.id)));
+
+    // 2. Identify spot IDs in DB that are NO LONGER in the new spots list
+    const idsToDelete = existingIds.filter((id) => !newIds.has(id));
+
+    // 3. Delete obsolete spots from 'parking_spaces' and 'parking_spots'
+    if (idsToDelete.length > 0) {
+      await supabase.from('parking_spaces').delete().in('id', idsToDelete);
+      await supabase.from('parking_spots').delete().in('id', idsToDelete);
+    }
+
+    // 4. Map spots to parking_spaces columns and upsert
+    const spaceRows = spots.map((s) => ({
+      id: String(s.id),
+      label: s.label || `Espacio ${s.id}`,
+      zone: s.zone || 'Sector A',
+      type_allowed: s.typeAllowed || ['auto', 'camioneta', 'moto', 'furgon', 'suv'],
+      status: s.status || 'disponible',
+      is_nightly_spot: Boolean(s.isNightlySpot),
+      vehicle_plate: s.vehiclePlate || null,
+      vehicle_type: s.vehicleType || null,
+      current_vehicle_id: s.currentVehicleId || null,
+      check_in_time: s.checkInTime || null,
+      data: s,
+      updated_at: new Date().toISOString(),
+    }));
+
+    if (spaceRows.length > 0) {
+      await supabase.from('parking_spaces').upsert(spaceRows, { onConflict: 'id' });
+    }
+
+    // Sync to parking_spots table as well for backward compatibility
+    const spotRows = spots.map((s) => ({
+      id: String(s.id),
       zone: s.zone,
       status: s.status,
       current_vehicle_id: s.currentVehicleId || null,
       data: s,
     }));
-    await supabase.from('parking_spots').upsert(rows, { onConflict: 'id' });
+    if (spotRows.length > 0) {
+      await supabase.from('parking_spots').upsert(spotRows, { onConflict: 'id' });
+    }
   } catch (err) {
-    console.warn('Supabase parking_spots sync error:', err);
+    console.warn('saveParkingSpacesCloud error:', err);
   }
+}
+
+export async function deleteParkingSpaceCloud(spotId: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  try {
+    await supabase.from('parking_spaces').delete().eq('id', spotId);
+    await supabase.from('parking_spots').delete().eq('id', spotId);
+  } catch (err) {
+    console.warn('deleteParkingSpaceCloud error:', err);
+  }
+}
+
+export async function syncSpotsCloud(spots: ParkingSpot[]) {
+  await saveParkingSpacesCloud(spots);
 }
 
 export async function syncStoreCatalogCloud(catalog: StoreItem[]) {
