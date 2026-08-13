@@ -715,177 +715,240 @@ export function subscribeAllRealtimeCloud(onAnyChange: () => void) {
 
 
 // SQL DDL Schema generator for easy copy-paste into Supabase SQL Editor
-export const SUPABASE_SQL_SCHEMA = `-- ESQUEMA COMPLETO DE TABLAS PARA AUTOPARK Y CARWASH EN SUPABASE
--- Copia y ejecuta este script completo en el "SQL Editor" de tu panel de Supabase:
+export const SUPABASE_SQL_SCHEMA = `-- ESQUEMA COMPLETO Y DEFINITIVO PARA AUTOPARK Y CARWASH EN SUPABASE
+-- Copia y ejecuta este script en el "SQL Editor" de tu panel de Supabase:
 
--- 1. Tabla de Vehículos Activos en Patio
-CREATE TABLE IF NOT EXISTS active_vehicles (
+DROP TABLE IF EXISTS public.wash_orders CASCADE;
+DROP TABLE IF EXISTS public.transactions CASCADE;
+DROP TABLE IF EXISTS public.active_vehicles CASCADE;
+DROP TABLE IF EXISTS public.parking_spaces CASCADE;
+DROP TABLE IF EXISTS public.parking_spots CASCADE;
+DROP TABLE IF EXISTS public.expenses CASCADE;
+DROP TABLE IF EXISTS public.accounting_entries CASCADE;
+DROP TABLE IF EXISTS public.bookings CASCADE;
+DROP TABLE IF EXISTS public.store_items CASCADE;
+DROP TABLE IF EXISTS public.staff_users CASCADE;
+DROP TABLE IF EXISTS public.vehicle_client_records CASCADE;
+DROP TABLE IF EXISTS public.client_records CASCADE;
+DROP TABLE IF EXISTS public.client_reviews CASCADE;
+DROP TABLE IF EXISTS public.rate_config CASCADE;
+
+-- 1. Tabla de Espacios del Patio
+CREATE TABLE public.parking_spaces (
   id TEXT PRIMARY KEY,
-  plate TEXT NOT NULL,
+  label TEXT,
+  zone TEXT DEFAULT 'Sector A',
+  type_allowed TEXT[] DEFAULT ARRAY['auto', 'camioneta', 'moto', 'furgon', 'suv'],
+  status TEXT DEFAULT 'disponible',
+  is_nightly_spot BOOLEAN DEFAULT false,
+  vehicle_plate TEXT,
   vehicle_type TEXT,
-  spot_id TEXT,
-  entry_time TIMESTAMPTZ NOT NULL,
-  charging_mode TEXT,
-  driver_name TEXT,
-  driver_phone TEXT,
-  store_items JSONB DEFAULT '[]'::jsonb,
-  attached_wash_service JSONB,
-  notes TEXT,
-  data JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  current_vehicle_id TEXT,
+  check_in_time TIMESTAMPTZ,
+  data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Tabla de Transacciones y Cobros (Histórico de Ventas)
-CREATE TABLE IF NOT EXISTS transactions (
+-- 2. Tabla de Vehículos Activos (incluye convenios y tarifas)
+CREATE TABLE public.active_vehicles (
+  id TEXT PRIMARY KEY,
+  plate TEXT NOT NULL,
+  vehicle_type TEXT NOT NULL DEFAULT 'auto',
+  charging_mode TEXT NOT NULL DEFAULT 'minuto',
+  entry_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  spot_id TEXT NOT NULL,
+  ticket_number TEXT,
+  covenant_id TEXT,
+  covenant_name TEXT,
+  discount_percentage NUMERIC DEFAULT 0,
+  fixed_rate NUMERIC,
+  hourly_rate NUMERIC,
+  minute_rate NUMERIC,
+  agreed_rate NUMERIC,
+  notes TEXT,
+  client_phone TEXT,
+  client_name TEXT,
+  driver_name TEXT,
+  driver_phone TEXT,
+  attached_wash_service JSONB,
+  attached_store_items JSONB DEFAULT '[]'::jsonb,
+  store_items JSONB DEFAULT '[]'::jsonb,
+  data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Tabla de Transacciones y Boletas
+CREATE TABLE public.transactions (
   id TEXT PRIMARY KEY,
   ticket_number TEXT,
-  boleta_number INTEGER,
-  date TIMESTAMPTZ NOT NULL,
-  type TEXT NOT NULL,
-  plate TEXT,
+  boleta_number INT8,
+  date TIMESTAMPTZ DEFAULT NOW(),
+  type TEXT DEFAULT 'parking',
+  plate TEXT NOT NULL,
   vehicle_type TEXT,
+  charging_mode TEXT,
+  spot_id TEXT,
+  entry_time TIMESTAMPTZ,
+  exit_time TIMESTAMPTZ DEFAULT NOW(),
+  elapsed_minutes INT4 DEFAULT 0,
   parking_fee NUMERIC DEFAULT 0,
   wash_fee NUMERIC DEFAULT 0,
   store_fee NUMERIC DEFAULT 0,
   net_total NUMERIC DEFAULT 0,
   vat_amount NUMERIC DEFAULT 0,
-  total NUMERIC DEFAULT 0,
-  payment_method TEXT NOT NULL,
+  discount_amount NUMERIC DEFAULT 0,
+  total NUMERIC NOT NULL DEFAULT 0,
+  payment_method TEXT DEFAULT 'efectivo',
+  covenant_name TEXT,
+  staff_name TEXT,
   item_details JSONB DEFAULT '[]'::jsonb,
-  data JSONB,
+  data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Tabla de Órdenes de Lavado (CarWash)
-CREATE TABLE IF NOT EXISTS wash_orders (
+-- 4. Tabla de Órdenes de Lavado
+CREATE TABLE public.wash_orders (
   id TEXT PRIMARY KEY,
+  ticket_number TEXT,
   plate TEXT NOT NULL,
   vehicle_type TEXT,
   service_id TEXT,
   service_name TEXT,
-  assigned_operator TEXT,
-  status TEXT NOT NULL,
   price NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'pendiente',
+  washer_id TEXT,
+  washer_name TEXT,
+  assigned_operator TEXT,
+  spot_id TEXT,
+  notes TEXT,
+  client_phone TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
-  spot_id TEXT,
-  data JSONB
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Tabla de Gastos Operacionales
-CREATE TABLE IF NOT EXISTS expenses (
+-- 5. Tabla de Gastos Operacionales
+CREATE TABLE public.expenses (
   id TEXT PRIMARY KEY,
   category TEXT NOT NULL,
   category_label TEXT,
-  description TEXT NOT NULL,
-  amount NUMERIC NOT NULL,
-  date TIMESTAMPTZ NOT NULL,
-  payment_method TEXT NOT NULL,
-  data JSONB,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  description TEXT,
+  date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  payment_method TEXT DEFAULT 'efectivo',
+  registered_by TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. Tabla de Asientos Contables (Libro Diario)
-CREATE TABLE IF NOT EXISTS accounting_entries (
+-- 6. Tabla de Asientos Contables
+CREATE TABLE public.accounting_entries (
   id TEXT PRIMARY KEY,
-  entry_number INTEGER NOT NULL,
-  date TEXT NOT NULL,
-  concept TEXT NOT NULL,
-  lines JSONB NOT NULL,
+  entry_number INT8,
+  date TEXT,
+  concept TEXT,
+  description TEXT,
+  lines JSONB DEFAULT '[]'::jsonb,
+  debit_amount NUMERIC DEFAULT 0,
+  credit_amount NUMERIC DEFAULT 0,
   total_debe NUMERIC DEFAULT 0,
   total_haber NUMERIC DEFAULT 0,
-  source_type TEXT NOT NULL,
+  source_type TEXT,
   reference_id TEXT,
-  data JSONB,
+  data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Tabla de Puestos de Estacionamiento
-CREATE TABLE IF NOT EXISTS parking_spots (
+-- 7. Tabla de Reservas
+CREATE TABLE public.bookings (
+  id TEXT PRIMARY KEY,
+  client_name TEXT,
+  client_phone TEXT,
+  plate TEXT NOT NULL,
+  date TEXT,
+  time_slot TEXT,
+  service_type TEXT,
+  spot_id TEXT,
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  status TEXT DEFAULT 'pendiente',
+  notes TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. Tablas Auxiliares (Puestos, Tienda, Usuarios, Clientes, Tarifas)
+CREATE TABLE public.parking_spots (
   id TEXT PRIMARY KEY,
   zone TEXT,
   status TEXT,
   current_vehicle_id TEXT,
-  data JSONB
+  data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Tabla de Reservas de Clientes
-CREATE TABLE IF NOT EXISTS bookings (
+CREATE TABLE public.store_items (
   id TEXT PRIMARY KEY,
-  client_name TEXT NOT NULL,
+  name TEXT NOT NULL,
+  price NUMERIC NOT NULL DEFAULT 0,
+  stock INT4 DEFAULT 0,
+  code TEXT,
+  category TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.staff_users (
+  id TEXT PRIMARY KEY,
+  username TEXT,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'cajero',
+  pin TEXT,
+  pin_code TEXT,
+  is_active BOOLEAN DEFAULT true,
+  data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.vehicle_client_records (
+  plate TEXT PRIMARY KEY,
+  client_name TEXT,
   client_phone TEXT,
-  plate TEXT NOT NULL,
-  date TEXT NOT NULL,
-  time_slot TEXT NOT NULL,
-  service_type TEXT NOT NULL,
-  status TEXT NOT NULL,
   notes TEXT,
-  data JSONB,
+  visit_count INT4 DEFAULT 1,
+  data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE public.client_reviews (
+  id TEXT PRIMARY KEY,
+  rating INT2 DEFAULT 5,
+  comment TEXT,
+  plate TEXT,
+  client_name TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Catálogo de Tienda
-CREATE TABLE IF NOT EXISTS store_items (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  category TEXT,
-  price NUMERIC DEFAULT 0,
-  stock INTEGER DEFAULT 0,
-  code TEXT,
-  data JSONB
+CREATE TABLE public.rate_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 9. Usuarios / Personal de Sistema
-CREATE TABLE IF NOT EXISTS staff_users (
-  id TEXT PRIMARY KEY,
-  username TEXT NOT NULL,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL,
-  pin TEXT NOT NULL,
-  data JSONB
-);
-
--- 10. Clientes y Reseñas
-CREATE TABLE IF NOT EXISTS client_records (
-  id TEXT PRIMARY KEY,
-  plate TEXT NOT NULL,
-  client_name TEXT,
-  data JSONB
-);
-
-CREATE TABLE IF NOT EXISTS client_reviews (
-  id TEXT PRIMARY KEY,
-  plate TEXT NOT NULL,
-  client_name TEXT,
-  rating INTEGER DEFAULT 5,
-  comment TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  data JSONB
-);
-
--- Habilitar RLS y políticas públicas para la API
-ALTER TABLE active_vehicles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE wash_orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE accounting_entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE parking_spots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE store_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE staff_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE client_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE client_reviews ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Lectura y escritura publica active_vehicles" ON active_vehicles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica wash_orders" ON wash_orders FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica expenses" ON expenses FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica accounting_entries" ON accounting_entries FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica parking_spots" ON parking_spots FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica bookings" ON bookings FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica store_items" ON store_items FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica staff_users" ON staff_users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica client_records" ON client_records FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Lectura y escritura publica client_reviews" ON client_reviews FOR ALL USING (true) WITH CHECK (true);
+-- Habilitar RLS en todas las tablas
+DO $$ 
+DECLARE 
+  t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('DROP POLICY IF EXISTS "Public access %I" ON public.%I;', t, t);
+    EXECUTE format('CREATE POLICY "Public access %I" ON public.%I FOR ALL USING (true) WITH CHECK (true);', t, t);
+  END LOOP;
+END $$;
 `;
 

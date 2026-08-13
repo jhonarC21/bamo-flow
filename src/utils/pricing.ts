@@ -20,7 +20,7 @@ export function calculateParkingFee(
   const diffMs = Math.max(0, end - start);
   const elapsedMinutes = Math.floor(diffMs / (1000 * 60));
 
-  const multiplier = config.typeMultipliers[vehicleType] || 1.0;
+  const multiplier = config.typeMultipliers?.[vehicleType] ?? 1.0;
   const grace = config.gracePeriodMinutes || 0;
 
   if (chargingMode === 'nocturno') {
@@ -50,46 +50,35 @@ export function calculateParkingFee(
 
   const billableMinutes = elapsedMinutes;
 
-  if (chargingMode === 'minuto') {
-    const rawFee = billableMinutes * config.minuteRate * multiplier;
-    const parkingFee = Math.round(rawFee);
+  // Regla de negocio por TRAMOS FIJOS
+  // Primer tramo (mínimo 30 minutos) = $900
+  // Tramos extras a partir del minuto 31 = $300 por cada bloque de 10 min o fracción de bloque
+  const firstBlockMins = Math.max(30, config.firstBlockMinutes || 30);
+  const firstPrice = config.firstBlockPrice ?? 900;
+  const subMins = Math.max(1, config.subsequentBlockMinutes || 10);
+  const subPrice = config.subsequentBlockPrice ?? 300;
+
+  if (billableMinutes <= firstBlockMins) {
+    const parkingFee = Math.round(firstPrice * multiplier);
     return {
       elapsedMinutes,
       billableMinutes,
       parkingFee,
-      breakdownText: `${billableMinutes} minutos valor ${formatCurrency(parkingFee)}`,
+      breakdownText: `1º Tramo (${firstBlockMins} min) valor ${formatCurrency(parkingFee)}`,
+      blocksCalculated: { firstBlock: true, extraBlocks: 0 }
     };
   } else {
-    // Mode: Tramo (Interval)
-    // First block >= 30 min
-    const firstBlockMins = Math.max(30, config.firstBlockMinutes);
-    const firstPrice = config.firstBlockPrice;
-    const subMins = Math.max(1, config.subsequentBlockMinutes || 10);
-    const subPrice = config.subsequentBlockPrice;
-
-    if (billableMinutes <= firstBlockMins) {
-      const parkingFee = Math.round(firstPrice * multiplier);
-      return {
-        elapsedMinutes,
-        billableMinutes,
-        parkingFee,
-        breakdownText: `${firstBlockMins} minutos valor ${formatCurrency(parkingFee)}`,
-        blocksCalculated: { firstBlock: true, extraBlocks: 0 }
-      };
-    } else {
-      const extraMinutes = billableMinutes - firstBlockMins;
-      const extraBlocks = Math.ceil(extraMinutes / subMins);
-      const totalRaw = firstPrice + (extraBlocks * subPrice);
-      const parkingFee = Math.round(totalRaw * multiplier);
-      const chargedMinutes = firstBlockMins + (extraBlocks * subMins);
-      return {
-        elapsedMinutes,
-        billableMinutes,
-        parkingFee,
-        breakdownText: `${chargedMinutes} minutos valor ${formatCurrency(parkingFee)}`,
-        blocksCalculated: { firstBlock: true, extraBlocks }
-      };
-    }
+    const extraMinutes = billableMinutes - firstBlockMins;
+    const extraBlocks = Math.ceil(extraMinutes / subMins);
+    const totalRaw = firstPrice + (extraBlocks * subPrice);
+    const parkingFee = Math.round(totalRaw * multiplier);
+    return {
+      elapsedMinutes,
+      billableMinutes,
+      parkingFee,
+      breakdownText: `1º Tramo (${firstBlockMins}m) + ${extraBlocks} tramo(s) extra (${subMins}m) = ${formatCurrency(parkingFee)}`,
+      blocksCalculated: { firstBlock: true, extraBlocks }
+    };
   }
 }
 

@@ -35,11 +35,11 @@ export const defaultAppConfig: AppConfig = {
 
 export const defaultRateConfig: RateConfig = {
   mode: 'tramo', // Default to interval charging
-  minuteRate: 35, // $35 por minuto en cobro directo
+  minuteRate: 30, // $30 por minuto en cobro directo
   firstBlockMinutes: 30, // 30 minutos mínimo obligado por especificación
-  firstBlockPrice: 1200, // $1.200 por los primeros 30 minutos
+  firstBlockPrice: 900, // $900 por los primeros 30 minutos (tramo fijo inicial)
   subsequentBlockMinutes: 10, // 10 minutos cada tramo siguiente
-  subsequentBlockPrice: 350, // $350 por cada tramo extra de 10 min
+  subsequentBlockPrice: 300, // $300 por cada tramo extra de 10 min
   gracePeriodMinutes: 5, // 5 minutos de tolerancia
   nightlyRate: 8000, // $8.000 por noche de pernocte
   typeMultipliers: {
