@@ -99,6 +99,7 @@ import {
   parkVehicleSpaceCloud,
   releaseVehicleSpaceCloud,
   subscribeParkingSpacesRealtime,
+  subscribeCrmMetricsRealtime,
   subscribeAllRealtimeCloud,
 } from './utils/supabase';
 
@@ -261,6 +262,50 @@ export default function App() {
       loadCloudData();
     });
 
+    // Subscribe to CRM/Metrics real-time changes to instantly unpack vehicles & update patio map + counters
+    const unsubscribeCrmRealtime = subscribeCrmMetricsRealtime(({ unpackedVehicles }) => {
+      if (unpackedVehicles && unpackedVehicles.length > 0) {
+        unpackedVehicles.forEach((vehicle) => {
+          // Instantly update activeVehicles state
+          setActiveVehicles((prev) => {
+            const cleanPlate = vehicle.plate.trim().toUpperCase();
+            const existingIndex = prev.findIndex(
+              (v) => v.id === vehicle.id || (v.plate && v.plate.trim().toUpperCase() === cleanPlate)
+            );
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = { ...updated[existingIndex], ...vehicle };
+              return updated;
+            }
+            return [vehicle, ...prev];
+          });
+
+          // Instantly update spot status in patio map
+          if (vehicle.spotId) {
+            const cleanSpotId = vehicle.spotId.trim().toUpperCase();
+            setSpots((prev) =>
+              prev.map((s) => {
+                const sId = s.id.trim().toUpperCase();
+                const sLabel = (s.label || '').trim().toUpperCase();
+                if (sId === cleanSpotId || (sLabel && sLabel === cleanSpotId)) {
+                  return {
+                    ...s,
+                    status: 'ocupado',
+                    currentVehicleId: vehicle.id,
+                    vehiclePlate: vehicle.plate,
+                    vehicleType: vehicle.vehicleType,
+                    checkInTime: vehicle.entryTime,
+                  };
+                }
+                return s;
+              })
+            );
+          }
+        });
+      }
+      loadCloudData();
+    });
+
     // Auto-refresh every 5 seconds as fallback for multi-device synchronization
     const syncTimer = setInterval(() => {
       loadCloudData();
@@ -270,6 +315,7 @@ export default function App() {
       clearInterval(syncTimer);
       unsubscribeRealtimeSpaces();
       unsubscribeAllRealtime();
+      unsubscribeCrmRealtime();
     };
   }, [loadCloudData]);
 
@@ -547,16 +593,17 @@ export default function App() {
       }
     }
 
-    // Upsert or update vehicle client record in DB
+    // Upsert or update vehicle client record in DB with embedded subcategory schema
+    let syncRecord: VehicleClientRecord | null = null;
+    const cleanPlate = data.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     setClientRecords((prev) => {
-      const cleanPlate = data.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
       const existingIdx = prev.findIndex(
         (cr) => cr.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanPlate
       );
       if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx] = {
+        const rec: any = {
           ...updated[existingIdx],
           clientName: data.driverName || updated[existingIdx].clientName,
           clientPhone: data.driverPhone || updated[existingIdx].clientPhone,
@@ -565,10 +612,16 @@ export default function App() {
           model: data.model || updated[existingIdx].model,
           color: data.color || updated[existingIdx].color,
           updatedAt: nowIso,
+          // Embedded active vehicle subcategory schema for real-time sync
+          activeVehicle: newVehicle,
+          spotId: data.spotId,
+          isParked: true,
         };
+        updated[existingIdx] = rec;
+        syncRecord = rec;
         return updated;
       } else {
-        const newRecord: VehicleClientRecord = {
+        const newRecord: any = {
           id: `cr-${Date.now()}`,
           plate: data.plate,
           make: data.make || '',
@@ -584,10 +637,19 @@ export default function App() {
           category: 'normal',
           createdAt: nowIso,
           updatedAt: nowIso,
+          // Embedded active vehicle subcategory schema for real-time sync
+          activeVehicle: newVehicle,
+          spotId: data.spotId,
+          isParked: true,
         };
+        syncRecord = newRecord;
         return [newRecord, ...prev];
       }
     });
+
+    if (syncRecord) {
+      syncClientRecordsCloud([syncRecord]);
+    }
 
     setSpots((prev) =>
       prev.map((s) => (s.id === data.spotId ? { ...s, status: 'ocupado', currentVehicleId: vehicleId, vehiclePlate: data.plate, vehicleType: data.vehicleType, checkInTime: nowIso } : s))
@@ -900,12 +962,23 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
     setClientRecords((prev) => [newRec, ...prev]);
+    syncClientRecordsCloud([newRec]);
   };
 
   const handleUpdateClientRecord = (id: string, updates: Partial<VehicleClientRecord>) => {
+    let updatedRec: VehicleClientRecord | null = null;
     setClientRecords((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r))
+      prev.map((r) => {
+        if (r.id === id) {
+          updatedRec = { ...r, ...updates, updatedAt: new Date().toISOString() };
+          return updatedRec;
+        }
+        return r;
+      })
     );
+    if (updatedRec) {
+      syncClientRecordsCloud([updatedRec]);
+    }
   };
 
   const handleDeleteClientRecord = (id: string) => {

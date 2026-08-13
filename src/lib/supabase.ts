@@ -690,6 +690,116 @@ export function subscribeParkingSpacesRealtime(
   }
 }
 
+export function unpackVehicleFromCrmRow(row: any): ActiveVehicle | null {
+  if (!row) return null;
+  const data = row.data || row;
+
+  // Check embedded activeVehicle object inside subcategory/schema
+  const av = data.activeVehicle || data.active_vehicle || data.currentVehicle || data.vehicle;
+  if (av && (av.plate || av.spotId || av.spot_id)) {
+    return {
+      id: String(av.id || data.id || row.id || `v-${av.plate || row.plate}`),
+      plate: String(av.plate || row.plate || data.plate || '').toUpperCase().trim(),
+      vehicleType: av.vehicleType || av.vehicle_type || data.vehicleType || 'auto',
+      make: av.make || data.make || '',
+      model: av.model || data.model || '',
+      color: av.color || data.color || '',
+      spotId: String(av.spotId || av.spot_id || data.spotId || data.spot_id || data.spot || '').trim().toUpperCase(),
+      entryTime: av.entryTime || av.entry_time || data.entryTime || data.checkInTime || row.created_at || new Date().toISOString(),
+      chargingMode: av.chargingMode || av.charging_mode || data.chargingMode || 'minuto',
+      driverName: av.driverName || av.driver_name || data.clientName || row.client_name || '',
+      driverPhone: av.driverPhone || av.driver_phone || data.clientPhone || '',
+      attachedWashService: av.attachedWashService || av.attached_wash_service,
+      attachedStoreItems: av.attachedStoreItems || av.attached_store_items || [],
+      notes: av.notes || data.notes || '',
+    };
+  }
+
+  // Check direct vehicle fields on row/data
+  const plate = String(data.plate || row.plate || '').toUpperCase().trim();
+  const spotId = String(data.spotId || data.spot_id || data.spot || data.currentSpot || row.spot_id || '').trim().toUpperCase();
+
+  if (plate && spotId) {
+    return {
+      id: String(data.id || row.id || `v-${plate}`),
+      plate,
+      vehicleType: data.vehicleType || data.vehicle_type || row.vehicle_type || 'auto',
+      make: data.make || '',
+      model: data.model || '',
+      color: data.color || '',
+      spotId,
+      entryTime: data.entryTime || data.entry_time || data.checkInTime || row.created_at || new Date().toISOString(),
+      chargingMode: data.chargingMode || data.charging_mode || 'minuto',
+      driverName: data.clientName || data.driverName || row.client_name || '',
+      driverPhone: data.clientPhone || data.driverPhone || '',
+      attachedWashService: data.attachedWashService,
+      attachedStoreItems: data.attachedStoreItems || [],
+      notes: data.notes || '',
+    };
+  }
+
+  return null;
+}
+
+export function unpackAllVehiclesFromCrmRow(row: any): ActiveVehicle[] {
+  if (!row) return [];
+  const data = row.data || row;
+  const list: ActiveVehicle[] = [];
+
+  const rawList = data.activeVehicles || data.vehicles || data.active_vehicles;
+  if (Array.isArray(rawList)) {
+    for (const item of rawList) {
+      const unpacked = unpackVehicleFromCrmRow({ data: item });
+      if (unpacked) list.push(unpacked);
+    }
+  }
+
+  const single = unpackVehicleFromCrmRow(row);
+  if (single && !list.some((v) => v.id === single.id || (v.plate === single.plate && v.spotId === single.spotId))) {
+    list.push(single);
+  }
+
+  return list;
+}
+
+export function subscribeCrmMetricsRealtime(
+  onCrmChange: (eventData: { newRow: any; oldRow: any; eventType: string; unpackedVehicles: ActiveVehicle[] }) => void
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel('public:crm_metrics_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_records' }, (payload) => {
+        const newRow = payload.new || {};
+        const oldRow = payload.old || {};
+        const unpackedVehicles = unpackAllVehiclesFromCrmRow(newRow);
+        onCrmChange({ newRow, oldRow, eventType: payload.eventType, unpackedVehicles });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_client_records' }, (payload) => {
+        const newRow = payload.new || {};
+        const oldRow = payload.old || {};
+        const unpackedVehicles = unpackAllVehiclesFromCrmRow(newRow);
+        onCrmChange({ newRow, oldRow, eventType: payload.eventType, unpackedVehicles });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, (payload) => {
+        const newRow = payload.new || {};
+        const oldRow = payload.old || {};
+        const unpackedVehicles = unpackAllVehiclesFromCrmRow(newRow);
+        onCrmChange({ newRow, oldRow, eventType: payload.eventType, unpackedVehicles });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('subscribeCrmMetricsRealtime error:', err);
+    return () => {};
+  }
+}
+
 export function subscribeAllRealtimeCloud(onAnyChange: () => void) {
   const supabase = getSupabaseClient();
   if (!supabase) return () => {};
@@ -699,6 +809,8 @@ export function subscribeAllRealtimeCloud(onAnyChange: () => void) {
       .channel('public:all_tables')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parking_spaces' }, () => onAnyChange())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_vehicles' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_records' }, () => onAnyChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_client_records' }, () => onAnyChange())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => onAnyChange())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wash_orders' }, () => onAnyChange())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => onAnyChange())
